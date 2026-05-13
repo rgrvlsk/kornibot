@@ -303,7 +303,6 @@ describe("deploy script helpers", () => {
       INITIAL_AUDIT_CHAT_ID: "-1000000000000",
     })).toEqual({
       BOT_TOKEN: "bot-token",
-      INITIAL_AUDIT_CHAT_ID: "-1000000000000",
     });
   });
 });

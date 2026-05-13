@@ -138,7 +138,6 @@ const WORKER_SECRET_KEYS = [
   "SESSION_SECRET",
   "BOOTSTRAP_SUPERADMIN_USER_ID",
   "CORS_ALLOWED_ORIGINS",
-  "INITIAL_AUDIT_CHAT_ID",
 ] as const satisfies readonly (keyof DeployConfig)[];
 
 type DeployAsset = {
