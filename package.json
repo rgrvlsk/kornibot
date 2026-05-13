@@ -1,0 +1,36 @@
+{
+  "name": "kornibot",
+  "private": true,
+  "packageManager": "pnpm@10.12.1",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json --noEmit",
+    "db:migrate:local": "CI=1 wrangler d1 migrations apply DB --local --config wrangler.jsonc",
+    "dev": "wrangler dev",
+    "deploy": "pnpm deploy:all",
+    "cf:deploy": "pnpm run deploy",
+    "cf:deploy:provision": "tsx scripts/deploy.ts deploy:provision",
+    "cf:deploy:migrate": "tsx scripts/deploy.ts deploy:migrate",
+    "cf:deploy:build": "tsx scripts/deploy.ts deploy:build",
+    "cf:deploy:release": "tsx scripts/deploy.ts deploy:release",
+    "cf:deploy:all": "tsx scripts/deploy.ts deploy:all",
+    "deploy:provision": "tsx scripts/deploy.ts deploy:provision",
+    "deploy:migrate": "tsx scripts/deploy.ts deploy:migrate",
+    "deploy:build": "tsx scripts/deploy.ts deploy:build",
+    "deploy:release": "tsx scripts/deploy.ts deploy:release",
+    "deploy:all": "tsx scripts/deploy.ts deploy:all",
+    "dev-access": "tsx scripts/deploy.ts dev-access",
+    "cf-typegen": "wrangler types",
+    "telegram:webhook:set": "tsx scripts/telegram-webhook.ts set",
+    "telegram:webhook:info": "tsx scripts/telegram-webhook.ts info"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.2",
+    "@cloudflare/workers-types": "^4.20250314.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.8.2",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.42.0"
+  }
+}
