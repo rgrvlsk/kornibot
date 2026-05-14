@@ -269,6 +269,10 @@ export async function handleApiRequest(
   }
 
   if (request.method === "PATCH" && path === "/api/settings/privacy/message-retention") {
+    if (!isSuperadminRole(currentRole)) {
+      return jsonResponse({ ok: false, message: "superadmin role required" }, { status: 403 });
+    }
+
     const payload = await request.json<Record<string, unknown>>();
 
     try {
