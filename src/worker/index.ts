@@ -5,6 +5,7 @@ import { handleApiRequest } from "./routes/api";
 import { handleAssetRequest } from "./routes/assets";
 import { handleDevAccessAuth, handleLogout, handleSessionRequest, handleTelegramAuth } from "./routes/auth-telegram";
 import { runHourlyAggregation } from "./cron/hourly-aggregation";
+import { runBirthdayGreetingSender } from "./services/birthday/birthday-sender";
 import { handleTelegramWebhook } from "./routes/telegram-webhook";
 import { runDailyKnownMemberStatusRefresh } from "./services/users/member-status-refresh";
 
@@ -77,8 +78,11 @@ export default {
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil((async () => {
       const scheduledAt = new Date(controller.scheduledTime);
-      await runHourlyAggregation(env, scheduledAt);
-      await runDailyKnownMemberStatusRefresh(env, scheduledAt);
+      if (controller.cron === "0 * * * *") {
+        await runHourlyAggregation(env, scheduledAt);
+        await runDailyKnownMemberStatusRefresh(env, scheduledAt);
+      }
+      await runBirthdayGreetingSender(env, scheduledAt);
     })());
   },
 };

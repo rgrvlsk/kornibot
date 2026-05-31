@@ -30,12 +30,22 @@ export async function resetAuditGroup(
   const groups = await readGroupSettings(env);
   const mediaObjects = await env.DB.prepare("SELECT DISTINCT r2_key FROM media_objects ORDER BY r2_key ASC")
     .all<MediaObjectRow>();
+  const birthdayCardMedia = await env.DB.prepare("SELECT DISTINCT r2_key FROM birthday_cards ORDER BY r2_key ASC")
+    .all<MediaObjectRow>();
+  const r2Keys = [...new Set([
+    ...birthdayCardMedia.results.map((mediaObject) => mediaObject.r2_key),
+    ...mediaObjects.results.map((mediaObject) => mediaObject.r2_key),
+  ])].sort();
 
-  for (const mediaObject of mediaObjects.results) {
-    await env.MEDIA_BUCKET.delete(mediaObject.r2_key);
+  for (const r2Key of r2Keys) {
+    await env.MEDIA_BUCKET.delete(r2Key);
   }
 
   await deleteAll(env.DB, "message_reactions");
+  await deleteAll(env.DB, "bot_flow_states");
+  await deleteAll(env.DB, "birthday_send_log");
+  await deleteAll(env.DB, "birthday_cards");
+  await deleteAll(env.DB, "birthday_preferences");
   await deleteAll(env.DB, "reaction_events");
   await deleteAll(env.DB, "message_replies");
   await deleteAll(env.DB, "message_versions");
@@ -60,7 +70,7 @@ export async function resetAuditGroup(
       )
       VALUES (?, ?, ?, ?)
     `)
-    .bind(groups.auditChatId, input.nextAuditChatId, input.resetByUserId, mediaObjects.results.length)
+    .bind(groups.auditChatId, input.nextAuditChatId, input.resetByUserId, r2Keys.length)
     .run();
 
   await updateAuditChatId(env, input.nextAuditChatId);
@@ -68,6 +78,6 @@ export async function resetAuditGroup(
   return {
     previousAuditChatId: groups.auditChatId,
     nextAuditChatId: input.nextAuditChatId,
-    deletedMediaObjects: mediaObjects.results.length,
+    deletedMediaObjects: r2Keys.length,
   };
 }

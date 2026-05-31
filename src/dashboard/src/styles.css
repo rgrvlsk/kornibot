@@ -2098,6 +2098,961 @@ button:disabled {
   color: var(--danger-strong);
 }
 
+.status-banner.tone-good {
+  border-color: rgba(184, 240, 90, 0.28);
+  color: var(--accent);
+}
+
+.almanac-page {
+  display: grid;
+  gap: 0.82rem;
+}
+
+.almanac-mast {
+  display: grid;
+  gap: 0.66rem;
+}
+
+.almanac-mast-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.72rem;
+}
+
+.almanac-mast h2 {
+  margin: 0;
+  font-size: 1.55rem;
+  line-height: 1;
+}
+
+.almanac-manage-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  min-height: 2.42rem;
+  padding: 0 0.72rem;
+  border: 1px solid rgba(184, 240, 90, 0.3);
+  border-radius: var(--radius);
+  color: var(--accent);
+  background: rgba(184, 240, 90, 0.08);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.almanac-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.42rem;
+}
+
+.almanac-metrics span {
+  display: grid;
+  gap: 0.08rem;
+  min-height: 3.2rem;
+  padding: 0.54rem;
+  border: 1px solid rgba(122, 183, 255, 0.22);
+  border-radius: var(--radius);
+  color: var(--muted);
+  background: rgba(19, 19, 21, 0.78);
+  font-size: 0.72rem;
+}
+
+.almanac-metrics b {
+  color: var(--text);
+  font-size: 1.08rem;
+  line-height: 1;
+}
+
+.almanac-warning-strip {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  gap: 0.56rem;
+  align-items: center;
+  padding: 0.68rem 0.75rem;
+  border: 1px solid rgba(240, 195, 40, 0.32);
+  border-radius: var(--radius);
+  background: rgba(240, 195, 40, 0.1);
+}
+
+.almanac-warning-strip svg {
+  color: var(--warm-strong);
+}
+
+.almanac-warning-strip div {
+  display: grid;
+  min-width: 0;
+  gap: 0.06rem;
+}
+
+.almanac-warning-strip span {
+  color: var(--muted-strong);
+  font-size: 0.82rem;
+}
+
+.almanac-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.44rem;
+}
+
+.almanac-month {
+  display: grid;
+  gap: 0.38rem;
+  min-width: 0;
+  padding: 0.48rem;
+  border: 1px solid rgba(122, 183, 255, 0.2);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(122, 183, 255, 0.07), rgba(15, 17, 20, 0.88));
+}
+
+.almanac-month header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 1.05rem;
+}
+
+.almanac-month strong {
+  overflow: hidden;
+  font-size: 0.72rem;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.month-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.1rem;
+}
+
+.month-day {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 4px;
+  color: #8c8d95;
+  background: rgba(255, 255, 255, 0.035);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.48rem;
+  line-height: 1;
+}
+
+.month-day.is-empty {
+  background: transparent;
+}
+
+.month-day.has-window::before {
+  position: absolute;
+  inset: auto 0 0;
+  height: 0.18rem;
+  background: var(--window-color, var(--focus));
+  content: "";
+}
+
+.month-day.has-birthday {
+  color: var(--window-color, var(--accent));
+  background: color-mix(in srgb, var(--window-color, var(--accent)) 16%, transparent);
+  font-weight: 600;
+}
+
+.birthday-crown-marker {
+  width: 0.86rem;
+  height: 0.86rem;
+  color: currentColor;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
+.birthday-crown-marker path {
+  fill: currentColor;
+}
+
+.birthday-crown-marker text {
+  fill: #101112;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 7.6px;
+  font-weight: 700;
+  line-height: 1;
+  text-anchor: middle;
+}
+
+.month-day.has-warning {
+  outline: 1px solid var(--warm-strong);
+  outline-offset: -1px;
+}
+
+.birthday-panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+  align-items: center;
+}
+
+.birthday-panel-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.birthday-panel-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.birthday-form-grid {
+  display: grid;
+  gap: 0.58rem;
+}
+
+.birthday-form-grid {
+  grid-template-columns: minmax(0, 1fr) 4.9rem 5.9rem;
+}
+
+.birthday-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted-strong);
+  font-size: 0.92rem;
+}
+
+.birthday-dropzone {
+  position: relative;
+  display: grid;
+  min-height: 7.2rem;
+  place-items: center;
+  gap: 0.45rem;
+  overflow: hidden;
+  padding: 0.8rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--muted-strong);
+  background: #101012;
+  text-align: center;
+}
+
+.birthday-dropzone input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.birthday-dropzone img {
+  width: 100%;
+  max-height: 9rem;
+  object-fit: contain;
+}
+
+.birthday-dropzone.has-preview {
+  background: #09090b;
+}
+
+.birthday-card-tools,
+.birthday-upload-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.almanac-sheet-backdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  align-items: end;
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.almanac-sheet {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  width: 100%;
+  max-height: min(86vh, 46rem);
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  background: #111113;
+  box-shadow: 0 -10px 26px rgba(0, 0, 0, 0.32);
+}
+
+.almanac-sheet-handle {
+  width: 2.7rem;
+  height: 0.22rem;
+  margin: 0.55rem auto 0.3rem;
+  border-radius: 999px;
+  background: #4a4a52;
+}
+
+.almanac-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding: 0.16rem 0.9rem 0.65rem;
+}
+
+.almanac-sheet-head h2 {
+  margin: 0;
+  font-size: 1.06rem;
+  line-height: 1.1;
+}
+
+.manager-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  border-block: 1px solid var(--border);
+}
+
+.manager-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.34rem;
+  min-width: 0;
+  min-height: 2.72rem;
+  padding: 0 0.32rem;
+  border: 0;
+  border-right: 1px solid var(--border);
+  color: var(--muted-strong);
+  background: #151517;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.manager-tabs button:last-child {
+  border-right: 0;
+}
+
+.manager-tabs button.is-active {
+  color: var(--accent);
+  background: #191b16;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.manager-content {
+  min-height: 0;
+  overflow: auto;
+  padding: 0.76rem 0.76rem calc(1rem + env(safe-area-inset-bottom));
+}
+
+.manager-section {
+  display: grid;
+  gap: 0.82rem;
+}
+
+.manager-upload-card {
+  display: grid;
+  gap: 0.62rem;
+  padding: 0.64rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #151517;
+}
+
+.manager-upload-top,
+.repository-head,
+.season-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.manager-upload-top strong,
+.repository-head strong,
+.season-title-row strong {
+  font-size: 0.95rem;
+}
+
+.manager-upload-top .primary-button {
+  min-height: 2.15rem;
+  padding: 0 0.66rem;
+}
+
+.destination-chips {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.28rem;
+}
+
+.destination-chips button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.24rem;
+  min-width: 0;
+  min-height: 2.15rem;
+  padding: 0 0.32rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--muted-strong);
+  background: #101012;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.destination-chips button.is-active {
+  border-color: rgba(184, 240, 90, 0.48);
+  color: var(--accent);
+  background: rgba(184, 240, 90, 0.08);
+}
+
+.manager-inline-select {
+  display: grid;
+  grid-template-columns: 5.4rem minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: center;
+  color: var(--muted-strong);
+  font-size: 0.78rem;
+}
+
+.manager-inline-select select,
+.season-create-strip input,
+.season-editor input {
+  min-width: 0;
+  min-height: 2.28rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  background: #101012;
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.manager-inline-select select,
+.season-create-strip input:not([type="color"]),
+.season-editor input:not([type="color"]) {
+  padding: 0 0.55rem;
+}
+
+.manager-dropzone {
+  position: relative;
+  display: grid;
+  grid-template-columns: 3.1rem minmax(0, 1fr);
+  gap: 0.58rem;
+  align-items: center;
+  min-height: 4rem;
+  overflow: hidden;
+  padding: 0.48rem;
+  border: 1px dashed #4a4a52;
+  border-radius: 7px;
+  color: var(--muted-strong);
+  background: #0d0d0f;
+}
+
+.manager-dropzone input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.manager-dropzone img,
+.manager-dropzone svg {
+  justify-self: center;
+}
+
+.manager-dropzone img {
+  width: 3.1rem;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.manager-dropzone span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repository-head span,
+.season-title-row span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.season-title-row .quiet-button {
+  min-height: 2.15rem;
+  padding: 0 0.58rem;
+}
+
+.card-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.card-tile {
+  position: relative;
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.42rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #151517;
+}
+
+.card-tile.tone-available {
+  border-color: rgba(184, 240, 90, 0.25);
+}
+
+.card-tile-image {
+  position: relative;
+  display: grid;
+  aspect-ratio: 1.08;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 6px;
+  color: var(--muted);
+  background: #0d0d0f;
+}
+
+.card-tile-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.card-tile-image em {
+  position: absolute;
+  left: 0.32rem;
+  bottom: 0.32rem;
+  max-width: calc(100% - 0.64rem);
+  overflow: hidden;
+  padding: 0.18rem 0.34rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 5px;
+  color: var(--text);
+  background: rgba(14, 14, 16, 0.82);
+  font-size: 0.62rem;
+  font-style: normal;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-tile-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.02rem;
+}
+
+.card-tile-copy strong,
+.card-tile-copy span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-tile-copy strong {
+  font-size: 0.82rem;
+  line-height: 1.1;
+}
+
+.card-tile-copy span {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.card-tile-menu {
+  position: absolute;
+  top: 0.54rem;
+  right: 0.54rem;
+  display: grid;
+  width: 1.45rem;
+  aspect-ratio: 1;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--muted-strong);
+  background: rgba(14, 14, 16, 0.75);
+}
+
+.card-tile-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.22rem;
+}
+
+.card-tile-actions .icon-button {
+  min-width: 0;
+  min-height: 1.95rem;
+}
+
+.season-create-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.56rem;
+  padding: 0.62rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)), #151517;
+}
+
+.season-create-strip .primary-button {
+  min-height: 2.55rem;
+  padding: 0 0.62rem;
+}
+
+.season-create-dates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.42rem;
+}
+
+.season-list {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.season-row {
+  display: grid;
+  gap: 0.46rem;
+  padding: 0.52rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #151517;
+}
+
+.season-row.is-disabled {
+  opacity: 0.55;
+}
+
+.season-row-main {
+  display: grid;
+  grid-template-columns: 0.3rem minmax(0, 1fr) 2.26rem 2.2rem;
+  gap: 0.52rem;
+  align-items: center;
+}
+
+.season-row-main > i {
+  width: 0.3rem;
+  height: 100%;
+  min-height: 2.38rem;
+  border-radius: 999px;
+}
+
+.season-row-main strong,
+.season-row-main span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.season-row-main strong {
+  font-size: 0.88rem;
+  line-height: 1.12;
+}
+
+.season-row-main span {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.season-switch {
+  position: relative;
+  display: inline-grid;
+  width: 2.18rem;
+  height: 1.28rem;
+  align-items: center;
+}
+
+.season-switch input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+
+.season-switch span {
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: #0d0d0f;
+}
+
+.season-switch span::after {
+  display: block;
+  width: 0.86rem;
+  aspect-ratio: 1;
+  margin: 0.15rem;
+  border-radius: 999px;
+  background: var(--muted);
+  content: "";
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+
+.season-switch input:checked + span {
+  border-color: rgba(184, 240, 90, 0.48);
+  background: rgba(184, 240, 90, 0.12);
+}
+
+.season-switch input:checked + span::after {
+  background: var(--accent);
+  transform: translateX(0.86rem);
+}
+
+.season-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.78rem;
+  margin-top: 0.14rem;
+  padding: 0.78rem;
+  border-top: 1px solid var(--border);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 7% 5%, rgba(122, 183, 255, 0.055), transparent 28%),
+    #111317;
+}
+
+.season-editor-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7.75rem, 0.44fr);
+  gap: 0.66rem;
+  align-items: end;
+}
+
+.season-editor-field,
+.season-interval {
+  display: grid;
+  min-width: 0;
+  gap: 0.42rem;
+}
+
+.season-editor-field > span,
+.season-interval > span {
+  color: #858994;
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.season-editor-field input {
+  min-height: 3.12rem;
+  padding: 0 0.92rem;
+  border-color: #30333c;
+  border-radius: 10px;
+  background: #0c0e12;
+  color: #f1f3f6;
+  font-size: 1rem;
+  letter-spacing: 0;
+}
+
+.season-auto-color {
+  display: grid;
+  grid-template-columns: 1.94rem minmax(0, 1fr);
+  gap: 0.46rem;
+  align-items: center;
+  min-height: 3.12rem;
+  min-width: 0;
+  padding: 0.46rem 0.64rem;
+  border: 1px solid #30333c;
+  border-radius: 10px;
+  background: #14161b;
+}
+
+.season-auto-color i {
+  display: block;
+  width: 1.82rem;
+  aspect-ratio: 1;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.season-auto-color span {
+  min-width: 0;
+  overflow: hidden;
+  color: #999da7;
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.season-date-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.64rem;
+}
+
+.season-date-picker {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 0.32rem;
+  min-height: 4.1rem;
+  padding: 0.72rem 2.18rem 0.72rem 0.78rem;
+  border: 1px solid #30333c;
+  border-radius: 10px;
+  background: #111318;
+}
+
+.season-date-picker:focus-within {
+  border-color: rgba(122, 183, 255, 0.56);
+  box-shadow: 0 0 0 0.12rem rgba(122, 183, 255, 0.12);
+}
+
+.season-date-picker.is-invalid {
+  border-color: rgba(255, 127, 139, 0.58);
+  box-shadow: 0 0 0 0.12rem rgba(255, 127, 139, 0.12);
+}
+
+.season-date-picker span {
+  color: #858994;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.season-date-picker input {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  color: #f4f5f7;
+  background: transparent;
+  color-scheme: dark;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.season-date-picker input::placeholder {
+  color: #666b75;
+}
+
+.season-date-picker input:focus {
+  outline: none;
+}
+
+.season-date-picker svg {
+  position: absolute;
+  right: 0.72rem;
+  top: 50%;
+  width: 1.12rem;
+  height: 1.12rem;
+  color: #aeb3bc;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.season-action-row {
+  display: grid;
+  grid-template-columns: minmax(5.8rem, 0.32fr) minmax(0, 1fr);
+  gap: 0.42rem;
+}
+
+.season-action-row .primary-button {
+  min-height: 2.72rem;
+}
+
+.season-delete-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  min-width: 0;
+  min-height: 2.72rem;
+  padding: 0 0.52rem;
+  border: 1px solid rgba(255, 127, 139, 0.34);
+  border-radius: 7px;
+  color: #ff9ba5;
+  background: rgba(255, 127, 139, 0.08);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.season-delete-button.is-confirming {
+  border-color: rgba(255, 127, 139, 0.6);
+  color: #0f0f11;
+  background: #ff7f8b;
+}
+
+.kornibot-manager {
+  display: grid;
+  grid-template-columns: 4.6rem minmax(0, 1fr);
+  gap: 0.68rem;
+  align-items: center;
+  padding: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #151517;
+}
+
+.kornibot-manager img {
+  width: 4.6rem;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.kornibot-manager div {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+.kornibot-manager strong,
+.kornibot-manager span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kornibot-manager span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.kornibot-manager .quiet-button {
+  grid-column: 1 / -1;
+}
+
+.birthday-profile-panel {
+  background:
+    linear-gradient(180deg, rgba(184, 240, 90, 0.08), rgba(13, 19, 25, 0.74)),
+    rgba(13, 15, 18, 0.92);
+}
+
+.birthday-card-tools .quiet-button,
+.birthday-card-tools .primary-button,
+.birthday-upload-row .quiet-button {
+  flex: 1 1 auto;
+}
+
+.birthday-upload-row .birthday-dropzone {
+  flex: 1 1 11rem;
+  min-height: 5.8rem;
+}
+
 .line-chart {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));

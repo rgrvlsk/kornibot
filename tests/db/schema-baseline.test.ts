@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { closeD1Databases, SqliteD1Database } from "../helpers/worker-test-env";
@@ -11,17 +12,23 @@ afterEach(() => {
 });
 
 describe("schema baseline", () => {
-  it("keeps a single current migration without course corrections", () => {
+  it("keeps current schema plus additive migrations without course corrections", () => {
     const migrationsDir = resolve(process.cwd(), "migrations");
     const files = readdirSync(migrationsDir).filter((file) => file.endsWith(".sql")).sort();
     const migration = readFileSync(join(migrationsDir, "0001_current_schema.sql"), "utf8");
+    const birthdayMigration = readFileSync(join(migrationsDir, "0002_birthday_almanac.sql"), "utf8");
 
-    expect(files).toEqual(["0001_current_schema.sql"]);
+    expect(files).toEqual(["0001_current_schema.sql", "0002_birthday_almanac.sql", "0003_birthday_window_uniqueness.sql"]);
     expect(migration).not.toMatch(/\bALTER\s+TABLE\b/i);
     expect(migration).not.toMatch(/\bDROP\s+TABLE\b/i);
     expect(migration).not.toMatch(/\bRENAME\s+TO\b/i);
     expect(migration).not.toContain("_cf_KV");
     expect(migration).not.toContain("d1_migrations");
+    expect(birthdayMigration).toContain("CREATE TABLE IF NOT EXISTS birthday_preferences");
+    expect(birthdayMigration).toContain("CREATE TABLE IF NOT EXISTS birthday_cards");
+    expect(birthdayMigration).toContain("CREATE TABLE IF NOT EXISTS birthday_windows");
+    expect(birthdayMigration).toContain("CREATE TABLE IF NOT EXISTS birthday_send_log");
+    expect(birthdayMigration).toContain("CREATE TABLE IF NOT EXISTS bot_flow_states");
   });
 
   it("creates the current production-shaped app schema", () => {
@@ -40,6 +47,11 @@ describe("schema baseline", () => {
       "activity_blips",
       "audit_group_resets",
       "auth_roles",
+      "birthday_cards",
+      "birthday_preferences",
+      "birthday_send_log",
+      "birthday_windows",
+      "bot_flow_states",
       "dashboard_access_hourly",
       "hourly_group_metrics",
       "hourly_user_metrics",
@@ -118,9 +130,72 @@ describe("schema baseline", () => {
       "role",
       "last_access_at",
     ]);
+    expect(tableColumns(db, "birthday_preferences")).toEqual([
+      "user_id",
+      "month",
+      "day",
+      "year",
+      "wants_ai_card",
+      "prompt_ideas_json",
+      "created_at",
+      "updated_at",
+    ]);
+    expect(tableColumns(db, "birthday_cards")).toEqual([
+      "id",
+      "scope_type",
+      "window_id",
+      "user_id",
+      "state",
+      "r2_key",
+      "file_name",
+      "mime_type",
+      "size_bytes",
+      "width",
+      "height",
+      "uploaded_by_user_id",
+      "uploaded_at",
+      "used_at",
+      "used_for_user_id",
+      "disabled_at",
+    ]);
+    expect(tableColumns(db, "birthday_windows")).toEqual([
+      "id",
+      "preset_key",
+      "label",
+      "starts_on",
+      "ends_on",
+      "color",
+      "enabled",
+      "created_at",
+      "updated_at",
+    ]);
+    expect(tableColumns(db, "birthday_send_log")).toEqual([
+      "user_id",
+      "celebration_date",
+      "status",
+      "birthday_card_id",
+      "telegram_message_id",
+      "sent_at",
+      "error_message",
+    ]);
+    expect(tableColumns(db, "bot_flow_states")).toEqual([
+      "user_id",
+      "flow",
+      "step",
+      "state_json",
+      "updated_at",
+      "expires_at",
+    ]);
     expect(indexes(db)).toEqual([
       "idx_activity_blips_user_period",
       "idx_auth_roles_role_active",
+      "idx_birthday_cards_scope_state",
+      "idx_birthday_cards_user_state",
+      "idx_birthday_cards_window_state",
+      "idx_birthday_preferences_month_day",
+      "idx_birthday_send_log_date_status",
+      "idx_birthday_windows_dates",
+      "idx_birthday_windows_preset_start_unique",
       "idx_dashboard_access_hourly_last_access",
       "idx_hourly_user_metrics_user_bucket",
       "idx_media_objects_chat_message",
@@ -160,6 +235,66 @@ describe("schema baseline", () => {
       "idx_user_membership_periods_user_time",
       "idx_users_username",
     ]);
+  });
+
+  it("deduplicates preset birthday windows before enforcing uniqueness", () => {
+    const migrationsDir = resolve(process.cwd(), "migrations");
+    const db = new DatabaseSync(":memory:");
+
+    try {
+      db.exec(readFileSync(join(migrationsDir, "0001_current_schema.sql"), "utf8"));
+      db.exec(readFileSync(join(migrationsDir, "0002_birthday_almanac.sql"), "utf8"));
+      db.exec("DROP INDEX IF EXISTS idx_birthday_windows_preset_start_unique");
+      db.exec(`
+        INSERT INTO users (user_id, updated_at)
+        VALUES (999, '2026-05-01T00:00:00.000Z');
+
+        INSERT INTO birthday_windows (
+          id,
+          preset_key,
+          label,
+          starts_on,
+          ends_on,
+          color,
+          enabled,
+          updated_at
+        )
+        VALUES
+          (1, 'nadal', 'Nadal', '2026-12-20', '2027-01-06', '#7ab7ff', 1, '2026-05-01T00:00:00.000Z'),
+          (2, 'nadal', 'Nadal', '2026-12-20', '2027-01-06', '#7ab7ff', 1, '2026-05-01T00:00:00.000Z');
+
+        INSERT INTO birthday_cards (
+          id,
+          scope_type,
+          window_id,
+          state,
+          r2_key,
+          uploaded_by_user_id
+        )
+        VALUES (10, 'window', 2, 'available', 'birthday/cards/window/nadal', 999);
+      `);
+
+      db.exec(readFileSync(join(migrationsDir, "0003_birthday_window_uniqueness.sql"), "utf8"));
+
+      expect(db.prepare("SELECT COUNT(*) AS count FROM birthday_windows").get()).toEqual({ count: 1 });
+      expect(db.prepare("SELECT window_id FROM birthday_cards WHERE id = 10").get()).toEqual({ window_id: 1 });
+      expect(() => {
+        db.prepare(`
+          INSERT INTO birthday_windows (
+            preset_key,
+            label,
+            starts_on,
+            ends_on,
+            color,
+            enabled,
+            updated_at
+          )
+          VALUES ('nadal', 'Nadal', '2026-12-20', '2027-01-06', '#7ab7ff', 1, '2026-05-01T00:00:00.000Z')
+        `).run();
+      }).toThrow();
+    } finally {
+      db.close();
+    }
   });
 });
 

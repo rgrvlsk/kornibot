@@ -1,4 +1,5 @@
 import { ACTIVITY_METRICS_CTE } from "../analytics/activity-metrics-source";
+import { queryBirthdayPreference, type BirthdayPreference } from "../birthday/birthday-service";
 
 type D1DatabaseLike = Pick<D1Database, "prepare">;
 
@@ -164,6 +165,7 @@ export async function queryUserProfile(
     reactionsReceived: number | null;
     averageReactionsPerMessage: number | null;
   } | null;
+  birthday: BirthdayPreference | null;
 }> {
   const user = await db.prepare(`
       SELECT
@@ -378,6 +380,7 @@ export async function queryUserProfile(
         averageReactionsPerMessage: selectedPeerAverages.average_reactions_per_message,
       }
       : null,
+    birthday: await queryBirthdayPreference(db, userId),
   };
 }
 

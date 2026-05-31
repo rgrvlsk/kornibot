@@ -1475,6 +1475,10 @@ describe("dashboard api", () => {
         chat_id, message_id, telegram_file_id, telegram_file_unique_id, kind, r2_key
       )
       VALUES (-1002829359850, 10, 'file-1', 'unique-file-1', 'document', 'telegram/-1002829359850/10/document-unique-file-1');
+      INSERT INTO birthday_cards (
+        scope_type, state, r2_key, file_name, mime_type, size_bytes, uploaded_by_user_id
+      )
+      VALUES ('global', 'available', 'birthday/cards/global-one', 'global.png', 'image/png', 8, 999);
     `);
 
     const caaResponse = await sendApiRequest(env, "/api/settings/audit-group-reset", "caa_member", 100, {
@@ -1505,13 +1509,17 @@ describe("dashboard api", () => {
       reset: {
         previousAuditChatId: -1002829359850,
         nextAuditChatId: -2222,
-        deletedMediaObjects: 1,
+        deletedMediaObjects: 2,
       },
     });
-    expect(bucket.deletedKeys).toEqual(["telegram/-1002829359850/10/document-unique-file-1"]);
+    expect(bucket.deletedKeys).toEqual([
+      "birthday/cards/global-one",
+      "telegram/-1002829359850/10/document-unique-file-1",
+    ]);
     expect(db.sqlite.prepare("SELECT COUNT(*) AS count FROM raw_events").get()).toEqual({ count: 0 });
     expect(db.sqlite.prepare("SELECT COUNT(*) AS count FROM messages").get()).toEqual({ count: 0 });
     expect(db.sqlite.prepare("SELECT COUNT(*) AS count FROM users").get()).toEqual({ count: 0 });
+    expect(db.sqlite.prepare("SELECT COUNT(*) AS count FROM birthday_cards").get()).toEqual({ count: 0 });
     expect(db.sqlite.prepare("SELECT value_json FROM settings WHERE key = 'groups.audit_chat_id'").get()).toEqual({
       value_json: "-2222",
     });

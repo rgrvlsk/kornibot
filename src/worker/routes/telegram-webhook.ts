@@ -1,4 +1,5 @@
 import type { Env } from "../../shared/env";
+import { handleBirthdayBotUpdate } from "../services/birthday/birthday-bot";
 import { markRawEventProjected, storeRawEvent } from "../services/events/store-raw-event";
 import { getAuditChatId } from "../services/settings/group-settings";
 import { projectMessage } from "../services/messages/project-message";
@@ -25,6 +26,11 @@ export async function handleTelegramWebhook(request: Request, env: Env): Promise
 
   if (!normalizedUpdate) {
     return jsonResponse({ ok: true, message: "telegram update ignored" });
+  }
+
+  const birthdayDisposition = await handleBirthdayBotUpdate(env, normalizedUpdate);
+  if (birthdayDisposition === "handled") {
+    return jsonResponse({ ok: true, message: "telegram birthday update processed" });
   }
 
   await recordTelegramChat(env.DB, normalizedUpdate);

@@ -221,6 +221,73 @@ export type UserProfilePayload = {
     reactionsReceived: number | null;
     averageReactionsPerMessage: number | null;
   } | null;
+  birthday?: BirthdayPreference | null;
+};
+
+export type BirthdayPreference = {
+  month: number;
+  day: number;
+  year: number | null;
+  wantsAiCard: boolean;
+  promptIdeas: string[];
+  updatedAt: string;
+  customCard: BirthdayCard | null;
+};
+
+export type BirthdayCard = {
+  id: number;
+  scopeType: "global" | "window" | "member";
+  windowId: number | null;
+  userId: number | null;
+  state: "available" | "used" | "archived" | "disabled";
+  r2Key: string;
+  fileName: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  width: number | null;
+  height: number | null;
+  uploadedByUserId: number;
+  uploadedAt: string;
+  usedAt: string | null;
+  usedForUserId: number | null;
+  disabledAt: string | null;
+};
+
+export type BirthdayWindow = {
+  id: number;
+  presetKey: string | null;
+  label: string;
+  startsOn: string;
+  endsOn: string;
+  color: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BirthdayAlmanacPayload = {
+  from: string;
+  through: string;
+  windows: BirthdayWindow[];
+  birthdays: Array<{
+    date: string;
+    userId: number;
+    username: string | null;
+    nickname: string | null;
+    firstName: string | null;
+    wantsAiCard: boolean;
+    hasUnusedMemberCard: boolean;
+  }>;
+  warnings: Array<{
+    date: string;
+    neededGenericCards: number;
+    availableGenericCards: number;
+  }>;
+};
+
+export type BirthdayCardsPayload = {
+  cards: BirthdayCard[];
+  nextCursor: number | null;
 };
 
 export type MemberMetricsPayload = {
@@ -477,6 +544,7 @@ type UserProfileResponse = {
   hourlyMetrics: UserProfilePayload["hourlyMetrics"];
   monthlySnapshots: UserProfilePayload["monthlySnapshots"];
   peerAverages: UserProfilePayload["peerAverages"];
+  birthday?: BirthdayPreference | null;
 };
 
 type MemberMetricsResponse = {
@@ -488,6 +556,34 @@ type MemberMetricsResponse = {
 };
 
 type ResumResponse = { ok: true } & ResumPayload;
+
+type BirthdayAlmanacResponse = { ok: true } & BirthdayAlmanacPayload;
+
+type BirthdayWindowsResponse = {
+  ok: true;
+  windows: BirthdayWindow[];
+};
+
+type BirthdayWindowResponse = {
+  ok: true;
+  window: BirthdayWindow;
+};
+
+type BirthdayCardsResponse = {
+  ok: true;
+  cards: BirthdayCard[];
+  nextCursor: number | null;
+};
+
+type BirthdayCardResponse = {
+  ok: true;
+  card: BirthdayCard;
+};
+
+type BirthdayPreferenceResponse = {
+  ok: true;
+  birthday: BirthdayPreference;
+};
 
 type ApiErrorResponse = {
   ok: false;
@@ -951,6 +1047,176 @@ export async function refreshMemberStatus(userId: string | number): Promise<Memb
   );
 }
 
+export async function loadBirthdayAlmanac(months = 12): Promise<QueryResult<BirthdayAlmanacPayload>> {
+  return requestJson<BirthdayAlmanacResponse, BirthdayAlmanacPayload>(
+    `/api/birthday/almanac?months=${encodeURIComponent(String(months))}`,
+    (payload) => ({
+      from: payload.from,
+      through: payload.through,
+      windows: payload.windows,
+      birthdays: payload.birthdays,
+      warnings: payload.warnings,
+    }),
+  );
+}
+
+export async function loadBirthdayWindows(): Promise<QueryResult<{ windows: BirthdayWindow[] }>> {
+  return requestJson<BirthdayWindowsResponse, { windows: BirthdayWindow[] }>(
+    "/api/birthday/windows",
+    (payload) => ({ windows: payload.windows }),
+  );
+}
+
+export async function loadBirthdayCards(options: {
+  cursor?: number | null;
+  limit?: number;
+} = {}): Promise<QueryResult<BirthdayCardsPayload>> {
+  const params = new URLSearchParams();
+  params.set("limit", String(options.limit ?? 60));
+  if (options.cursor !== undefined && options.cursor !== null) {
+    params.set("cursor", String(options.cursor));
+  }
+
+  return requestJson<BirthdayCardsResponse, BirthdayCardsPayload>(
+    `/api/birthday/cards?${params.toString()}`,
+    (payload) => ({
+      cards: payload.cards,
+      nextCursor: payload.nextCursor,
+    }),
+  );
+}
+
+export async function createBirthdayWindow(payload: {
+  presetKey?: string | null;
+  label: string;
+  startsOn: string;
+  endsOn: string;
+  color: string;
+  enabled: boolean;
+}): Promise<BirthdayWindow> {
+  return mutateJson<BirthdayWindowResponse, BirthdayWindow>(
+    "/api/birthday/windows",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+    (response) => response.window,
+  );
+}
+
+export async function updateBirthdayWindow(
+  windowId: number,
+  payload: Partial<Pick<BirthdayWindow, "label" | "startsOn" | "endsOn" | "color" | "enabled">>,
+): Promise<BirthdayWindow> {
+  return mutateJson<BirthdayWindowResponse, BirthdayWindow>(
+    `/api/birthday/windows/${windowId}`,
+    {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+    (response) => response.window,
+  );
+}
+
+export async function deleteBirthdayWindow(windowId: number): Promise<void> {
+  const response = await fetch(buildApiUrl(`/api/birthday/windows/${windowId}`), {
+    method: "DELETE",
+    credentials: "include",
+    headers: createHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response));
+  }
+}
+
+export async function uploadBirthdayCard(payload: {
+  scopeType: BirthdayCard["scopeType"];
+  windowId?: number | null;
+  userId?: number | null;
+  file: File;
+}): Promise<BirthdayCard> {
+  const form = new FormData();
+  form.set("scopeType", payload.scopeType);
+  if (payload.windowId) {
+    form.set("windowId", String(payload.windowId));
+  }
+  if (payload.userId) {
+    form.set("userId", String(payload.userId));
+  }
+  form.set("file", payload.file, payload.file.name);
+
+  return mutateJson<BirthdayCardResponse, BirthdayCard>(
+    "/api/birthday/cards",
+    {
+      method: "POST",
+      body: form,
+    },
+    (response) => response.card,
+  );
+}
+
+export async function updateBirthdayCard(
+  cardId: number,
+  payload: Pick<BirthdayCard, "state">,
+): Promise<BirthdayCard> {
+  return mutateJson<BirthdayCardResponse, BirthdayCard>(
+    `/api/birthday/cards/${cardId}`,
+    {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+    (response) => response.card,
+  );
+}
+
+export async function updateUserBirthday(
+  userId: string | number,
+  payload: {
+    month: number;
+    day: number;
+    year: number | null;
+    wantsAiCard: boolean;
+    promptIdeas: string[];
+  },
+): Promise<BirthdayPreference> {
+  return mutateJson<BirthdayPreferenceResponse, BirthdayPreference>(
+    `/api/users/${userId}/birthday`,
+    {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+    (response) => response.birthday,
+  );
+}
+
+export async function deleteUserBirthday(userId: string | number): Promise<void> {
+  const response = await fetch(buildApiUrl(`/api/users/${userId}/birthday`), {
+    method: "DELETE",
+    credentials: "include",
+    headers: createHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response));
+  }
+}
+
+export async function loadBirthdayCardImageObjectUrl(cardId: number): Promise<string | null> {
+  return loadApiAssetObjectUrl(`/api/birthday/cards/${cardId}/image`);
+}
+
 export async function loadUserProfile(userId: string): Promise<QueryResult<UserProfilePayload>> {
   return requestJson<UserProfileResponse, UserProfilePayload>(
     `/api/users/${userId}`,
@@ -960,6 +1226,7 @@ export async function loadUserProfile(userId: string): Promise<QueryResult<UserP
       hourlyMetrics: payload.hourlyMetrics,
       monthlySnapshots: payload.monthlySnapshots,
       peerAverages: payload.peerAverages,
+      birthday: payload.birthday ?? null,
     }),
   );
 }

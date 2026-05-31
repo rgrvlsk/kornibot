@@ -4,6 +4,20 @@ import { resolveSessionRole } from "../services/auth/resolve-session-role";
 import { refreshKnownCaaMemberRoles } from "../services/auth/sync-caa-roles";
 import { queryDashboardAccessOverview } from "../services/analytics/query-dashboard-access";
 import { recordDashboardAccess } from "../services/analytics/record-dashboard-access";
+import {
+  createBirthdayCard,
+  createBirthdayWindow,
+  deleteBirthdayWindow,
+  deleteBirthdayPreference,
+  ensureUpcomingBirthdayWindows,
+  listBirthdayCards,
+  listBirthdayWindows,
+  patchBirthdayCard,
+  patchBirthdayWindow,
+  queryBirthdayAlmanac,
+  queryBirthdayCard,
+  upsertBirthdayPreference,
+} from "../services/birthday/birthday-service";
 import { queryFeed } from "../services/api/feed-query";
 import { queryMemberMetrics } from "../services/api/member-metrics-query";
 import { queryResum } from "../services/api/resum-query";
@@ -28,6 +42,39 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
 
 function isSuperadminRole(role: string): boolean {
   return role === "superadmin";
+}
+
+function isStaffRole(role: string): boolean {
+  return role === "superadmin" || role === "caa_member";
+}
+
+function parseInteger(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const parsed = Number(String(value));
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function parseOptionalPositiveInteger(value: string | null): number | undefined {
+  if (value === null || value === "") {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function parseBirthdayCardState(value: unknown): "available" | "used" | "archived" | "disabled" | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (value === "available" || value === "used" || value === "archived" || value === "disabled") {
+    return value;
+  }
+
+  throw new Error("invalid birthday card state");
 }
 
 export async function handleApiRequest(
@@ -126,6 +173,153 @@ export async function handleApiRequest(
     });
   }
 
+  if (request.method === "GET" && path === "/api/birthday/almanac") {
+    const months = Number(url.searchParams.get("months") ?? 12);
+    const from = url.searchParams.get("from") ?? new Date().toISOString().slice(0, 10);
+    try {
+      const result = await queryBirthdayAlmanac(env.DB, {
+        from,
+        months: Number.isFinite(months) ? months : 12,
+      });
+      return jsonResponse({ ok: true, ...result });
+    } catch (error) {
+      return jsonResponse({ ok: false, message: error instanceof Error ? error.message : "invalid birthday almanac query" }, { status: 400 });
+    }
+  }
+
+  if (request.method === "GET" && path === "/api/birthday/windows") {
+    await ensureUpcomingBirthdayWindows(env.DB, new Date());
+    return jsonResponse({ ok: true, windows: await listBirthdayWindows(env.DB) });
+  }
+
+  if (request.method === "GET" && path === "/api/birthday/cards") {
+    const result = await listBirthdayCards(env.DB, {
+      cursor: parseOptionalPositiveInteger(url.searchParams.get("cursor")),
+      limit: parseOptionalPositiveInteger(url.searchParams.get("limit")),
+    });
+    return jsonResponse({ ok: true, ...result });
+  }
+
+  if (request.method === "POST" && path === "/api/birthday/windows") {
+    if (!isStaffRole(currentRole)) {
+      return jsonResponse({ ok: false, message: "staff role required" }, { status: 403 });
+    }
+
+    const payload = await request.json<Record<string, unknown>>();
+    try {
+      const window = await createBirthdayWindow(env.DB, {
+        presetKey: typeof payload.presetKey === "string" ? payload.presetKey : null,
+        label: String(payload.label ?? ""),
+        startsOn: String(payload.startsOn ?? ""),
+        endsOn: String(payload.endsOn ?? ""),
+        color: String(payload.color ?? "#7ab7ff"),
+        enabled: payload.enabled !== false,
+      });
+      return jsonResponse({ ok: true, window });
+    } catch (error) {
+      return jsonResponse({ ok: false, message: error instanceof Error ? error.message : "invalid birthday window" }, { status: 400 });
+    }
+  }
+
+  if (request.method === "PATCH" && /^\/api\/birthday\/windows\/\d+$/.test(path)) {
+    if (!isStaffRole(currentRole)) {
+      return jsonResponse({ ok: false, message: "staff role required" }, { status: 403 });
+    }
+
+    const windowId = Number(path.split("/").at(-1));
+    const payload = await request.json<Record<string, unknown>>();
+    try {
+      const window = await patchBirthdayWindow(env.DB, windowId, {
+        label: typeof payload.label === "string" ? payload.label : undefined,
+        startsOn: typeof payload.startsOn === "string" ? payload.startsOn : undefined,
+        endsOn: typeof payload.endsOn === "string" ? payload.endsOn : undefined,
+        color: typeof payload.color === "string" ? payload.color : undefined,
+        enabled: typeof payload.enabled === "boolean" ? payload.enabled : undefined,
+      });
+      return window
+        ? jsonResponse({ ok: true, window })
+        : jsonResponse({ ok: false, message: "birthday window not found" }, { status: 404 });
+    } catch (error) {
+      return jsonResponse({ ok: false, message: error instanceof Error ? error.message : "invalid birthday window" }, { status: 400 });
+    }
+  }
+
+  if (request.method === "DELETE" && /^\/api\/birthday\/windows\/\d+$/.test(path)) {
+    if (!isStaffRole(currentRole)) {
+      return jsonResponse({ ok: false, message: "staff role required" }, { status: 403 });
+    }
+
+    const windowId = Number(path.split("/").at(-1));
+    const deleted = await deleteBirthdayWindow(env.DB, windowId);
+    return deleted
+      ? new Response(null, { status: 204 })
+      : jsonResponse({ ok: false, message: "birthday window not found" }, { status: 404 });
+  }
+
+  if (request.method === "POST" && path === "/api/birthday/cards") {
+    if (!isStaffRole(currentRole)) {
+      return jsonResponse({ ok: false, message: "staff role required" }, { status: 403 });
+    }
+
+    try {
+      const form = await request.formData();
+      const file = form.get("file") as unknown as File | null;
+      if (!file || typeof (file as { arrayBuffer?: unknown }).arrayBuffer !== "function") {
+        throw new Error("file is required");
+      }
+
+      const card = await createBirthdayCard(env, {
+        scopeType: String(form.get("scopeType") ?? "global") as "global" | "window" | "member",
+        windowId: parseInteger(form.get("windowId")),
+        userId: parseInteger(form.get("userId")),
+        uploadedByUserId: session.userId,
+        file,
+      });
+      return jsonResponse({ ok: true, card });
+    } catch (error) {
+      return jsonResponse({ ok: false, message: error instanceof Error ? error.message : "invalid birthday card" }, { status: 400 });
+    }
+  }
+
+  if (request.method === "PATCH" && /^\/api\/birthday\/cards\/\d+$/.test(path)) {
+    if (!isStaffRole(currentRole)) {
+      return jsonResponse({ ok: false, message: "staff role required" }, { status: 403 });
+    }
+
+    const cardId = Number(path.split("/").at(-1));
+    const payload = await request.json<Record<string, unknown>>();
+    try {
+      const card = await patchBirthdayCard(env.DB, cardId, {
+        state: parseBirthdayCardState(payload.state),
+      });
+      return card
+        ? jsonResponse({ ok: true, card })
+        : jsonResponse({ ok: false, message: "birthday card not found" }, { status: 404 });
+    } catch (error) {
+      return jsonResponse({ ok: false, message: error instanceof Error ? error.message : "invalid birthday card" }, { status: 400 });
+    }
+  }
+
+  if (request.method === "GET" && /^\/api\/birthday\/cards\/\d+\/image$/.test(path)) {
+    const cardId = Number(path.split("/").at(-2));
+    const card = await queryBirthdayCard(env.DB, cardId);
+    if (!card) {
+      return jsonResponse({ ok: false, message: "birthday card not found" }, { status: 404 });
+    }
+
+    const object = await env.MEDIA_BUCKET.get(card.r2Key);
+    if (!object) {
+      return jsonResponse({ ok: false, message: "birthday card image not found" }, { status: 404 });
+    }
+
+    return new Response(object.body, {
+      headers: {
+        "cache-control": "private, max-age=300",
+        "content-type": card.mimeType ?? object.httpMetadata?.contentType ?? "image/png",
+      },
+    });
+  }
+
   if (request.method === "GET" && /^\/api\/users\/\d+\/profile-photo$/.test(path)) {
     const userId = Number(path.split("/").at(-2));
     const photo = await queryUserProfilePhoto(env.DB, userId);
@@ -209,7 +403,42 @@ export async function handleApiRequest(
   if (request.method === "GET" && /^\/api\/users\/\d+$/.test(path)) {
     const userId = Number(path.split("/").at(-1));
     const result = await queryUserProfile(env.DB, userId);
-    return jsonResponse({ ok: true, ...result });
+    const body: Record<string, unknown> = { ok: true, ...result };
+    if (result.birthday === null) {
+      delete body.birthday;
+    }
+    return jsonResponse(body);
+  }
+
+  if (request.method === "PUT" && /^\/api\/users\/\d+\/birthday$/.test(path)) {
+    if (!isStaffRole(currentRole)) {
+      return jsonResponse({ ok: false, message: "staff role required" }, { status: 403 });
+    }
+
+    const userId = Number(path.split("/").at(-2));
+    const payload = await request.json<Record<string, unknown>>();
+    try {
+      const birthday = await upsertBirthdayPreference(env.DB, userId, {
+        month: Number(payload.month),
+        day: Number(payload.day),
+        year: payload.year === null || payload.year === undefined || payload.year === "" ? null : Number(payload.year),
+        wantsAiCard: payload.wantsAiCard === true,
+        promptIdeas: Array.isArray(payload.promptIdeas) ? payload.promptIdeas.filter((item): item is string => typeof item === "string") : [],
+      });
+      return jsonResponse({ ok: true, birthday });
+    } catch (error) {
+      return jsonResponse({ ok: false, message: error instanceof Error ? error.message : "invalid birthday payload" }, { status: 400 });
+    }
+  }
+
+  if (request.method === "DELETE" && /^\/api\/users\/\d+\/birthday$/.test(path)) {
+    if (!isStaffRole(currentRole)) {
+      return jsonResponse({ ok: false, message: "staff role required" }, { status: 403 });
+    }
+
+    const userId = Number(path.split("/").at(-2));
+    await deleteBirthdayPreference(env.DB, userId);
+    return new Response(null, { status: 204 });
   }
 
   if (request.method === "GET" && /^\/api\/threads\/-?\d+\/\d+$/.test(path)) {

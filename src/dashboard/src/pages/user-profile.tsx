@@ -1,16 +1,21 @@
 import type { ReactElement } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Activity, ArrowLeft, CalendarDays, Clock3, Hash, Heart, Loader2, MessageCircle, RefreshCw, Shield, UserRound } from "lucide-react";
+import { Activity, ArrowLeft, CalendarDays, Clipboard, Clock3, Download, Gift, Hash, Heart, Loader2, MessageCircle, RefreshCw, Save, Shield, Trash2, Upload, UserRound } from "lucide-react";
 import { ActivityHeatmap } from "../components/activity-heatmap";
 import { MonthlyComparison } from "../components/monthly-comparison";
 import { ReactionBreakdown } from "../components/reaction-breakdown";
 import {
   loadApiAssetObjectUrl,
+  buildApiAssetUrl,
+  deleteUserBirthday,
   loadSettings,
   loadUserProfile,
   loadUsers,
   refreshMemberStatus,
+  updateUserBirthday,
+  uploadBirthdayCard,
+  type BirthdayPreference,
   type QueryResult,
   type SettingsPayload,
   type UserListPayload,
@@ -57,6 +62,66 @@ function formatDate(value: string | null | undefined, options: { includeTime?: b
   }
 
   return new Intl.DateTimeFormat("ca-ES", formatOptions).format(new Date(value));
+}
+
+const KORNIBOT_IMAGE_PATH = "/assets/kornibot-profile.png";
+
+function formatBirthday(birthday: BirthdayPreference | null | undefined): string {
+  if (!birthday) {
+    return "Sense aniversari";
+  }
+
+  const date = `${birthday.day}/${birthday.month}`;
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const hasPassed = now.getMonth() + 1 > birthday.month || (now.getMonth() + 1 === birthday.month && now.getDate() >= birthday.day);
+  const age = birthday.year ? ` · ${currentYear - birthday.year - (hasPassed ? 0 : 1)} anys` : "";
+  return `${date}${birthday.year ? `/${birthday.year}` : ""}${age}`;
+}
+
+function maxDayForMonth(month: number): number {
+  if (month === 2) {
+    return 29;
+  }
+
+  return [4, 6, 9, 11].includes(month) ? 30 : 31;
+}
+
+function monthName(month: number): string {
+  return new Intl.DateTimeFormat("ca-ES", {
+    month: "long",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(2000, month - 1, 1)));
+}
+
+function firstImageFromTransfer(items: DataTransferItemList | null): File | null {
+  if (!items) {
+    return null;
+  }
+
+  for (const item of Array.from(items)) {
+    if (item.kind === "file" && item.type.startsWith("image/")) {
+      return item.getAsFile();
+    }
+  }
+
+  return null;
+}
+
+function buildBirthdayPrompt(name: string, birthday: BirthdayPreference | null | undefined, ideasText: string): string {
+  const ideas = ideasText
+    .split(/[\n,;]+/g)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join(", ") || birthday?.promptIdeas.join(", ") || "personal details from staff notes";
+
+  return [
+    `Birthday card for ${name}.`,
+    "Include Kornibot, a colorful robotic unicorn mascot, as a friendly companion.",
+    `Use these ideas: ${ideas}.`,
+    "Use inspired-by language and do not copy protected characters directly.",
+    "Warm Barcelona community birthday mood. No text-heavy layout.",
+  ].join("\n");
 }
 
 function recentMetrics(hourlyMetrics: UserProfilePayload["hourlyMetrics"]): UserProfilePayload["hourlyMetrics"] {
@@ -145,6 +210,251 @@ function profileMembershipLabel(status: string | null): string {
   }
 
   return memberStatusLabel(status);
+}
+
+function BirthdayProfilePanel(props: {
+  userId: string;
+  name: string;
+  birthday: BirthdayPreference | null | undefined;
+  onReload: () => Promise<void>;
+}): ReactElement {
+  const [month, setMonth] = useState(() => String(props.birthday?.month ?? 1));
+  const [day, setDay] = useState(() => String(props.birthday?.day ?? 1));
+  const [year, setYear] = useState(() => props.birthday?.year ? String(props.birthday.year) : "");
+  const [wantsAiCard, setWantsAiCard] = useState(() => props.birthday?.wantsAiCard ?? false);
+  const [ideasText, setIdeasText] = useState(() => props.birthday?.promptIdeas.join("\n") ?? "");
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [issue, setIssue] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setMonth(String(props.birthday?.month ?? 1));
+    setDay(String(props.birthday?.day ?? 1));
+    setYear(props.birthday?.year ? String(props.birthday.year) : "");
+    setWantsAiCard(props.birthday?.wantsAiCard ?? false);
+    setIdeasText(props.birthday?.promptIdeas.join("\n") ?? "");
+  }, [props.birthday]);
+
+  useEffect(() => {
+    const parsedMonth = Number(month);
+    const parsedDay = Number(day);
+    const maxDay = maxDayForMonth(parsedMonth);
+    if (parsedDay > maxDay) {
+      setDay(String(maxDay));
+    }
+  }, [day, month]);
+
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(null);
+      return undefined;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
+
+  function setPickedFile(nextFile: File | null): void {
+    if (!nextFile) {
+      return;
+    }
+    if (!nextFile.type.startsWith("image/")) {
+      setIssue("El fitxer no es imatge.");
+      return;
+    }
+    setIssue(null);
+    setFile(nextFile);
+  }
+
+  async function saveBirthday(): Promise<void> {
+    setBusy(true);
+    try {
+      await updateUserBirthday(props.userId, {
+        month: Number(month),
+        day: Number(day),
+        year: year.trim() ? Number(year) : null,
+        wantsAiCard,
+        promptIdeas: ideasText
+          .split(/[\n,;]+/g)
+          .map((item) => item.trim())
+          .filter(Boolean),
+      });
+      setMessage("Aniversari desat.");
+      setIssue(null);
+      await props.onReload();
+    } catch (error) {
+      setMessage(null);
+      setIssue(error instanceof Error ? error.message : "No s'ha pogut desar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteBirthday(): Promise<void> {
+    setBusy(true);
+    try {
+      await deleteUserBirthday(props.userId);
+      setMessage("Aniversari esborrat.");
+      setIssue(null);
+      await props.onReload();
+    } catch (error) {
+      setMessage(null);
+      setIssue(error instanceof Error ? error.message : "No s'ha pogut esborrar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function uploadCustomCard(): Promise<void> {
+    if (!file) {
+      setIssue("Falta imatge.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await uploadBirthdayCard({
+        scopeType: "member",
+        userId: Number(props.userId),
+        file,
+      });
+      setFile(null);
+      setMessage("Targeta pujada.");
+      setIssue(null);
+      await props.onReload();
+    } catch (error) {
+      setMessage(null);
+      setIssue(error instanceof Error ? error.message : "No s'ha pogut pujar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyPrompt(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(buildBirthdayPrompt(props.name, props.birthday, ideasText));
+      setMessage("Prompt copiat.");
+      setIssue(null);
+    } catch {
+      setIssue("Copia no disponible.");
+    }
+  }
+
+  async function copyKornibotImage(): Promise<void> {
+    try {
+      if (!navigator.clipboard || !("ClipboardItem" in window)) {
+        throw new Error("clipboard unavailable");
+      }
+      const response = await fetch(buildApiAssetUrl(KORNIBOT_IMAGE_PATH));
+      const blob = await response.blob();
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      setMessage("Kornibot copiat.");
+      setIssue(null);
+    } catch {
+      setIssue("Copia no disponible. Baixa la imatge.");
+    }
+  }
+
+  return (
+    <section
+      className="profile-panel birthday-profile-panel"
+      onPaste={(event) => {
+        const pastedFile = firstImageFromTransfer(event.clipboardData?.items ?? null);
+        if (pastedFile) {
+          event.preventDefault();
+          setPickedFile(pastedFile);
+        }
+      }}
+    >
+      <div className="birthday-panel-head">
+        <h2>Aniversari</h2>
+        <span><Gift aria-hidden="true" size={16} /> {formatBirthday(props.birthday)}</span>
+      </div>
+      {issue ? <span className="profile-refresh-result tone-failed">{issue}</span> : null}
+      {message ? <span className="profile-refresh-result tone-done">{message}</span> : null}
+      <div className="birthday-form-grid">
+        <label className="filter-field">
+          <span>Mes</span>
+          <select value={month} onChange={(event) => setMonth(event.target.value)}>
+            {Array.from({ length: 12 }, (_, index) => index + 1).map((value) => (
+              <option key={value} value={value}>{monthName(value)}</option>
+            ))}
+          </select>
+        </label>
+        <label className="filter-field">
+          <span>Dia</span>
+          <select value={day} onChange={(event) => setDay(event.target.value)}>
+            {Array.from({ length: maxDayForMonth(Number(month)) }, (_, index) => index + 1).map((value) => (
+              <option key={value} value={value}>{value}</option>
+            ))}
+          </select>
+        </label>
+        <label className="filter-field">
+          <span>Any</span>
+          <input inputMode="numeric" placeholder="opcional" value={year} onChange={(event) => setYear(event.target.value)} />
+        </label>
+      </div>
+      <label className="birthday-toggle">
+        <input checked={wantsAiCard} type="checkbox" onChange={(event) => setWantsAiCard(event.target.checked)} />
+        Targeta AI
+      </label>
+      {wantsAiCard ? (
+        <label className="filter-field">
+          <span>Idees</span>
+          <textarea value={ideasText} onChange={(event) => setIdeasText(event.target.value)} placeholder="series, llibres, hobbies" />
+        </label>
+      ) : null}
+      <div className="profile-action-row">
+        <button className="primary-button" disabled={busy} onClick={() => void saveBirthday()} type="button">
+          <Save aria-hidden="true" size={17} />
+          Desa
+        </button>
+        {props.birthday ? (
+          <button className="quiet-button danger-button" disabled={busy} onClick={() => void deleteBirthday()} type="button">
+            <Trash2 aria-hidden="true" size={17} />
+            Esborra
+          </button>
+        ) : null}
+      </div>
+      {wantsAiCard ? (
+        <div className="birthday-card-tools">
+          <button className="quiet-button" onClick={() => void copyPrompt()} type="button">
+            <Clipboard aria-hidden="true" size={17} />
+            Copia prompt
+          </button>
+          <button className="quiet-button" onClick={() => void copyKornibotImage()} type="button">
+            <Clipboard aria-hidden="true" size={17} />
+            Copia Kornibot
+          </button>
+          <a className="quiet-button" download href={buildApiAssetUrl(KORNIBOT_IMAGE_PATH)}>
+            <Download aria-hidden="true" size={17} />
+            Baixa
+          </a>
+        </div>
+      ) : null}
+      <div className="birthday-upload-row">
+        <label
+          className={`birthday-dropzone${previewUrl ? " has-preview" : ""}`}
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            setPickedFile(event.dataTransfer.files[0] ?? null);
+          }}
+        >
+          {previewUrl ? <img alt="" src={previewUrl} /> : <Upload aria-hidden="true" size={24} />}
+          <span>{file?.name ?? (props.birthday?.customCard ? `Feta #${props.birthday.customCard.id}` : "Puja custom")}</span>
+          <input accept="image/*" type="file" onChange={(event) => setPickedFile(event.target.files?.[0] ?? null)} />
+        </label>
+        <button className="quiet-button" disabled={!file || busy} onClick={() => void uploadCustomCard()} type="button">
+          <Upload aria-hidden="true" size={17} />
+          Pujar
+        </button>
+      </div>
+    </section>
+  );
 }
 
 export function UserProfilePage(): ReactElement {
@@ -342,6 +652,13 @@ export function UserProfilePage(): ReactElement {
               </div>
             </div>
           </section>
+
+          <BirthdayProfilePanel
+            birthday={profile.birthday ?? null}
+            name={name}
+            onReload={reloadProfile}
+            userId={userId}
+          />
 
           <section className="profile-panel profile-heatmap-panel">
             <h2>Finestra d'activitat <span>(ultims 7 dies)</span></h2>

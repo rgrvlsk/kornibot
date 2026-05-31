@@ -16,6 +16,10 @@ export type TelegramAdministrator = {
   };
 };
 
+export type TelegramSentMessage = {
+  message_id: number;
+};
+
 export class TelegramApiError extends Error {
   public constructor(message: string) {
     super(message);
@@ -58,10 +62,51 @@ export async function sendTelegramMessage(
   env: Env,
   chatId: number,
   text: string,
-): Promise<void> {
-  await callTelegramMethod(env, "sendMessage", {
+  options: {
+    replyMarkup?: unknown;
+  } = {},
+): Promise<TelegramSentMessage> {
+  return callTelegramMethod<TelegramSentMessage>(env, "sendMessage", {
     chat_id: chatId,
     text,
     disable_web_page_preview: true,
+    ...(options.replyMarkup ? { reply_markup: options.replyMarkup } : {}),
   });
+}
+
+export async function answerTelegramCallbackQuery(
+  env: Env,
+  callbackQueryId: string,
+  text?: string,
+): Promise<void> {
+  await callTelegramMethod(env, "answerCallbackQuery", {
+    callback_query_id: callbackQueryId,
+    ...(text ? { text } : {}),
+  });
+}
+
+export async function sendTelegramPhoto(
+  env: Env,
+  chatId: number,
+  photo: Blob,
+  fileName: string,
+  caption: string,
+): Promise<TelegramSentMessage> {
+  const form = new FormData();
+  form.set("chat_id", String(chatId));
+  form.set("caption", caption);
+  form.set("photo", photo, fileName);
+
+  const response = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/sendPhoto`, {
+    method: "POST",
+    body: form,
+  });
+  const parsed = await response.json<TelegramApiResponse<TelegramSentMessage>>()
+    .catch((): TelegramApiResponse<TelegramSentMessage> => ({}));
+
+  if (!response.ok || parsed.ok === false || parsed.result === undefined) {
+    throw new TelegramApiError(parsed.description ?? `Telegram sendPhoto failed with HTTP ${response.status}`);
+  }
+
+  return parsed.result;
 }

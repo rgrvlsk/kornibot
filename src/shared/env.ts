@@ -7,4 +7,5 @@ export interface Env {
   CORS_ALLOWED_ORIGINS: string;
   BOOTSTRAP_SUPERADMIN_USER_ID?: string;
   INITIAL_AUDIT_CHAT_ID?: string;
+  TELEGRAM_BOT_USERNAME?: string;
 }

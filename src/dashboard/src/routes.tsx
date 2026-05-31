@@ -1,8 +1,9 @@
 import { useEffect, useRef, type ReactElement, type ReactNode } from "react";
-import { Activity, Settings, UsersRound } from "lucide-react";
+import { Activity, CalendarDays, Settings, UsersRound } from "lucide-react";
 import { matchPath, NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { recordDashboardVisit } from "./lib/api";
 import { MembersPage } from "./pages/members";
+import { AlmanacPage } from "./pages/almanac";
 import { ResumConceptsPage, ResumPage } from "./pages/resum-concepts";
 import { SettingsPage } from "./pages/settings";
 import { ThreadPage } from "./pages/thread";
@@ -33,6 +34,14 @@ const navigationRoutes: AppRoute[] = [
     description: "Directori Policornis.",
     element: <MembersPage />,
     icon: <UsersRound aria-hidden="true" size={18} />,
+  },
+  {
+    path: "/almanac",
+    navPath: "/almanac",
+    label: "Almanac",
+    description: "Aniversaris i targetes.",
+    element: <AlmanacPage />,
+    icon: <CalendarDays aria-hidden="true" size={18} />,
   },
   {
     path: "/settings",
