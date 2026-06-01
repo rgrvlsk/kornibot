@@ -118,7 +118,6 @@ describe("telegram auth", () => {
         userId: 1001,
         username: "agt_ksg",
       },
-      sessionToken: expect.any(String),
       user: {
         id: 1001,
         username: "agt_ksg",
@@ -170,7 +169,6 @@ describe("telegram auth", () => {
         userId: 1221,
         username: "marta",
       },
-      sessionToken: expect.any(String),
       user: {
         id: 1221,
         username: "marta",
@@ -321,10 +319,10 @@ describe("telegram auth", () => {
     expect((await response.json()).role).toBe("caa_member");
   });
 
-  it("returns the current session from a bearer token", async () => {
+  it("returns the current session from the signed session cookie", async () => {
     const { db, env } = createEnv();
     const fetchMock = vi.mocked(globalThis.fetch);
-    const token = await createSessionToken(env, {
+    const cookie = await createSessionToken(env, {
       userId: 4004,
       username: "nia",
       role: "caa_member",
@@ -352,7 +350,7 @@ describe("telegram auth", () => {
     const response = await sendAuthRequest(env, "/auth/session", {
       method: "GET",
       headers: {
-        authorization: `Bearer ${token}`,
+        cookie: `kornibot_session=${cookie}`,
       },
     });
 
@@ -364,6 +362,28 @@ describe("telegram auth", () => {
         userId: 4004,
         username: "nia",
       },
+    });
+  });
+
+  it("rejects signed session tokens sent through bearer auth", async () => {
+    const { env } = createEnv();
+    const token = await createSessionToken(env, {
+      userId: 4004,
+      username: "nia",
+      role: "caa_member",
+    });
+
+    const response = await sendAuthRequest(env, "/auth/session", {
+      method: "GET",
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      ok: false,
+      message: "missing or invalid session",
     });
   });
 
@@ -388,12 +408,12 @@ describe("telegram auth", () => {
       },
       body: JSON.stringify({ key }),
     });
-    const authPayload = await authResponse.json() as { sessionToken: string };
+    const cookie = authResponse.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
 
     const sessionResponse = await sendAuthRequest(env, "/auth/session", {
       method: "GET",
       headers: {
-        authorization: `Bearer ${authPayload.sessionToken}`,
+        cookie,
       },
     });
 
@@ -410,11 +430,24 @@ describe("telegram auth", () => {
     const revokedResponse = await sendAuthRequest(env, "/auth/session", {
       method: "GET",
       headers: {
-        authorization: `Bearer ${authPayload.sessionToken}`,
+        cookie,
       },
     });
 
     expect(authResponse.status).toBe(200);
+    expect(await authResponse.json()).toEqual({
+      ok: true,
+      role: "superadmin",
+      session: {
+        role: "superadmin",
+        userId: 1001,
+        username: "dev-access",
+      },
+      user: {
+        id: 1001,
+        username: "dev-access",
+      },
+    });
     expect(sessionResponse.status).toBe(200);
     expect(await sessionResponse.json()).toEqual({
       ok: true,

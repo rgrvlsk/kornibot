@@ -31,7 +31,7 @@ export function applyCorsHeaders(response: Response, request: Request, env: Env)
   headers.set("access-control-allow-origin", allowedOrigin);
   headers.set("access-control-allow-credentials", "true");
   headers.set("access-control-allow-methods", "GET,POST,PATCH,PUT,OPTIONS");
-  headers.set("access-control-allow-headers", "authorization,content-type,x-kornibot-dev-access-key");
+  headers.set("access-control-allow-headers", "content-type,x-kornibot-dev-access-key");
   headers.append("vary", "origin");
 
   return new Response(response.body, {

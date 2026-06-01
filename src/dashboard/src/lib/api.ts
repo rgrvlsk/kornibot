@@ -456,7 +456,6 @@ type AuthResponse = {
   ok: true;
   role: SessionRole;
   session: DashboardSession;
-  sessionToken: string;
   user: {
     id: number;
     username: string | null;
@@ -595,7 +594,7 @@ type TelegramAuthPayload = Record<string, unknown>;
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
 
 const TELEGRAM_BOT_USERNAME = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME ?? "").trim();
-const SESSION_TOKEN_STORAGE_KEY = "kornibot.dashboard.session-token";
+const LEGACY_SESSION_TOKEN_STORAGE_KEY = "kornibot.dashboard.session-token";
 const DEV_ACCESS_KEY_STORAGE_KEY = "kornibot.dashboard.dev-access-key";
 const DEV_ACCESS_KEY_HEADER = "x-kornibot-dev-access-key";
 const VISIT_TRACKING_DEDUPE_MS = 10_000;
@@ -623,18 +622,19 @@ export async function loadApiAssetObjectUrl(path: string): Promise<string | null
   return URL.createObjectURL(await response.blob());
 }
 
+function clearLegacySessionToken(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
 
-function readStoredSessionToken(): string | null {
-  return window.sessionStorage.getItem(SESSION_TOKEN_STORAGE_KEY);
+  try {
+    window.sessionStorage.removeItem(LEGACY_SESSION_TOKEN_STORAGE_KEY);
+  } catch {
+    // Ignore browsers that block sessionStorage.
+  }
 }
 
-function storeSessionToken(token: string): void {
-  window.sessionStorage.setItem(SESSION_TOKEN_STORAGE_KEY, token);
-}
-
-export function clearStoredSessionToken(): void {
-  window.sessionStorage.removeItem(SESSION_TOKEN_STORAGE_KEY);
-}
+clearLegacySessionToken();
 
 function supportsStoredDevAccessKey(): boolean {
   return import.meta.env.DEV && typeof window !== "undefined";
@@ -672,11 +672,6 @@ function createHeaders(extraHeaders?: HeadersInit): Headers {
   const devAccessKey = readStoredDevAccessKey();
   if (devAccessKey) {
     headers.set(DEV_ACCESS_KEY_HEADER, devAccessKey);
-  }
-
-  const token = readStoredSessionToken();
-  if (token) {
-    headers.set("authorization", `Bearer ${token}`);
   }
 
   return headers;
@@ -744,7 +739,6 @@ export async function authenticateTelegram(payload: TelegramAuthPayload): Promis
     body: JSON.stringify(payload),
   }, (value) => value);
 
-  storeSessionToken(response.sessionToken);
   return response.session;
 }
 
@@ -757,7 +751,6 @@ export async function authenticateDevAccess(key: string): Promise<DashboardSessi
     body: JSON.stringify({ key }),
   }, (value) => value);
 
-  storeSessionToken(response.sessionToken);
   storeDevAccessKey(key.trim());
   return response.session;
 }
@@ -770,7 +763,6 @@ export async function loadCurrentSession(): Promise<DashboardSession | null> {
     });
 
     if (response.status === 401 || response.status === 403) {
-      clearStoredSessionToken();
       clearStoredDevAccessKey();
       return null;
     }
@@ -787,7 +779,6 @@ export async function loadCurrentSession(): Promise<DashboardSession | null> {
 }
 
 export async function logoutSession(): Promise<void> {
-  clearStoredSessionToken();
   clearStoredDevAccessKey();
 
   try {

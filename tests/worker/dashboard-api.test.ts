@@ -317,6 +317,7 @@ describe("dashboard api", () => {
     expect(response.status).toBe(204);
     expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
     expect(response.headers.get("access-control-allow-headers")).toContain(DEV_ACCESS_KEY_HEADER);
+    expect(response.headers.get("access-control-allow-headers")).not.toContain("authorization");
   });
 
   it("rejects CORS preflight when allowed origins are not configured", async () => {
@@ -1529,7 +1530,7 @@ describe("dashboard api", () => {
     });
   });
 
-  it("accepts bearer sessions for the read api", async () => {
+  it("rejects bearer sessions for the read api", async () => {
     const { db, env } = createEnv();
     seedDashboardFixture(db);
     const token = await createSessionToken(env, {
@@ -1547,7 +1548,10 @@ describe("dashboard api", () => {
 
     const response = await worker.fetch(request, env, createExecutionContext());
 
-    expect(response.status).toBe(200);
-    expect((await response.json()).items).toHaveLength(1);
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      ok: false,
+      message: "missing or invalid session",
+    });
   });
 });

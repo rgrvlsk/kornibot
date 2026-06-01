@@ -58,20 +58,6 @@ async function signValue(secret: string, value: string): Promise<string> {
   return base64UrlEncodeBytes(new Uint8Array(signature));
 }
 
-function parseBearerToken(request: Request): string | null {
-  const authorization = request.headers.get("authorization");
-  if (!authorization) {
-    return null;
-  }
-
-  const [scheme, token] = authorization.split(/\s+/, 2);
-  if (scheme?.toLowerCase() !== "bearer" || !token) {
-    return null;
-  }
-
-  return token;
-}
-
 function parseCookieValue(request: Request, name: string): string | null {
   const header = request.headers.get("cookie");
   if (!header) {
@@ -117,7 +103,7 @@ export async function readSessionFromRequest(
   env: Env,
   request: Request,
 ): Promise<SessionPayload | null> {
-  const rawCookie = parseBearerToken(request) ?? parseCookieValue(request, "kornibot_session");
+  const rawCookie = parseCookieValue(request, "kornibot_session");
 
   if (!rawCookie) {
     return null;

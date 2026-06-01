@@ -3,7 +3,7 @@ import { bootstrapSuperadmin } from "../services/auth/bootstrap-superadmin";
 import { createDevAccessSession } from "../services/auth/dev-access";
 import { readDashboardSessionFromRequest } from "../services/auth/request-session";
 import { resolveSessionRole } from "../services/auth/resolve-session-role";
-import { clearSessionCookie, createSessionCookie, createSessionToken } from "../services/auth/session";
+import { clearSessionCookie, createSessionCookie } from "../services/auth/session";
 import { refreshSingleCaaMemberRole } from "../services/auth/sync-caa-roles";
 import { resolveRole } from "../services/auth/resolve-role";
 import { verifyTelegramLoginPayload } from "../services/auth/verify-telegram-login";
@@ -102,7 +102,6 @@ export async function handleTelegramAuth(request: Request, env: Env): Promise<Re
     ok: true,
     role,
     session,
-    sessionToken: await createSessionToken(env, session),
     user: {
       id: verifiedUser.userId,
       username: verifiedUser.username,
@@ -127,12 +126,16 @@ export async function handleDevAccessAuth(request: Request, env: Env): Promise<R
     "content-type": "application/json; charset=utf-8",
   });
   headers.append("set-cookie", await createSessionCookie(env, session));
+  const publicSession = {
+    userId: session.userId,
+    username: session.username,
+    role: session.role,
+  } as const;
 
   return new Response(JSON.stringify({
     ok: true,
     role: session.role,
-    session,
-    sessionToken: await createSessionToken(env, session),
+    session: publicSession,
     user: {
       id: session.userId,
       username: session.username,
