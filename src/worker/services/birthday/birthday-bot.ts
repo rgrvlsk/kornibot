@@ -3,11 +3,23 @@ import { formatPrivateBotCommandMenu, type PrivateBotCommandName } from "../bot/
 import { emptyPrivateBotCommandAccess, resolveLivePrivateBotCommandAccess, syncPrivateBotCommandsForAccess } from "../bot/command-sync";
 import { resolveRole } from "../auth/resolve-role";
 import { readGroupSettings } from "../settings/group-settings";
-import { sendTelegramMessage, answerTelegramCallbackQuery } from "../telegram/api";
+import { sendTelegramMessage, sendTelegramPhoto, answerTelegramCallbackQuery } from "../telegram/api";
 import { fetchTelegramChatMember, isActiveTelegramChatMember } from "../telegram/fetch-chat-member";
 import { fetchTelegramFile } from "../telegram/fetch-file";
 import type { NormalizedCallbackQueryUpdate, NormalizedMessageUpdate, NormalizedTelegramUpdate } from "../telegram/normalize-update";
-import { createBirthdayCard, deleteBirthdayPreference, normalizeBirthdayYear, queryBirthdayPreference, queryBirthdayWindow, upsertBirthdayPreference, type BirthdayPreference } from "./birthday-service";
+import {
+  createBirthdayCard,
+  deleteBirthdayPreference,
+  listBirthdayCardMemberTargets,
+  listBirthdayWindows,
+  normalizeBirthdayYear,
+  queryBirthdayPreference,
+  queryBirthdayWindow,
+  upsertBirthdayPreference,
+  type BirthdayCardMemberTarget,
+  type BirthdayPreference,
+  type BirthdayWindow,
+} from "./birthday-service";
 
 type BirthdayBotDisposition = "handled" | "continue";
 
@@ -33,6 +45,9 @@ type CardFlowState = {
 type ParsedBirthdayYear =
   | { ok: true; year: number | null }
   | { ok: false; message: string };
+
+const CARD_PICKER_PAGE_SIZE = 5;
+const KORNIBOT_REFERENCE_IMAGE_KEY = "deploy-assets/kornibot-profile.png";
 
 export async function handleBirthdayBotUpdate(
   env: Env,
@@ -318,7 +333,7 @@ async function handleCardCallback(env: Env, update: NormalizedCallbackQueryUpdat
     return;
   }
 
-  const [, action] = update.data?.split(":") ?? [];
+  const [, action, rawValue] = update.data?.split(":") ?? [];
   if (action === "global") {
     await startCardUpload(env, update.chatId, update.actorUser.userId, {
       scopeType: "global",
@@ -330,14 +345,84 @@ async function handleCardCallback(env: Env, update: NormalizedCallbackQueryUpdat
 
   if (action === "window") {
     await persistBotFlow(env, update.actorUser.userId, "cards", "scope", { awaiting: "window" });
-    await sendTelegramMessage(env, update.chatId, "ID finestra.");
+    await sendWindowPicker(env, update.chatId, 0);
+    return;
+  }
+
+  if (action === "w") {
+    await persistBotFlow(env, update.actorUser.userId, "cards", "scope", { awaiting: "window" });
+    await sendWindowPicker(env, update.chatId, parsePickerCursor(rawValue));
+    return;
+  }
+
+  if (action === "wp") {
+    const windowId = parsePickerId(rawValue);
+    if (windowId) {
+      await startCardUpload(env, update.chatId, update.actorUser.userId, { scopeType: "window", windowId, userId: null });
+    }
     return;
   }
 
   if (action === "member") {
     await persistBotFlow(env, update.actorUser.userId, "cards", "scope", { awaiting: "member" });
-    await sendTelegramMessage(env, update.chatId, "ID membre.");
+    await sendMemberPicker(env, update.chatId, 0);
+    return;
   }
+
+  if (action === "m") {
+    await persistBotFlow(env, update.actorUser.userId, "cards", "scope", { awaiting: "member" });
+    await sendMemberPicker(env, update.chatId, parsePickerCursor(rawValue));
+    return;
+  }
+
+  if (action === "mp") {
+    const userId = parsePickerId(rawValue);
+    if (userId) {
+      await startCardUpload(env, update.chatId, update.actorUser.userId, { scopeType: "member", windowId: null, userId });
+    }
+  }
+}
+
+async function sendWindowPicker(env: Env, chatId: number, cursor: number): Promise<void> {
+  const windows = (await listBirthdayWindows(env.DB)).filter((window) => window.enabled);
+  const page = pagedItems(windows, cursor);
+  if (page.items.length === 0) {
+    await sendTelegramMessage(env, chatId, "Cap finestra disponible. Escriu un ID de finestra valid.");
+    return;
+  }
+
+  await sendTelegramMessage(env, chatId, "Tria finestra.", {
+    replyMarkup: {
+      inline_keyboard: [
+        ...page.items.map((window) => [{
+          text: formatWindowPickerLabel(window),
+          callback_data: `card:wp:${window.id}`,
+        }]),
+        ...pickerNavigationRows("w", page),
+      ],
+    },
+  });
+}
+
+async function sendMemberPicker(env: Env, chatId: number, cursor: number): Promise<void> {
+  const targets = await listBirthdayCardMemberTargets(env.DB);
+  const page = pagedItems(targets, cursor);
+  if (page.items.length === 0) {
+    await sendTelegramMessage(env, chatId, "Cap membre disponible. Escriu un ID de membre valid.");
+    return;
+  }
+
+  await sendTelegramMessage(env, chatId, "Tria membre.", {
+    replyMarkup: {
+      inline_keyboard: [
+        ...page.items.map((target) => [{
+          text: formatMemberPickerLabel(target),
+          callback_data: `card:mp:${target.userId}`,
+        }]),
+        ...pickerNavigationRows("m", page),
+      ],
+    },
+  });
 }
 
 async function handleCardsTextOrUpload(
@@ -478,10 +563,32 @@ async function startCardUpload(
 
   if (state.scopeType === "member" && state.userId) {
     const preference = await queryBirthdayPreference(env.DB, state.userId);
-    await sendTelegramMessage(env, chatId, buildMemberPrompt(state.userId, preference));
+    await sendMemberPrompt(env, chatId, state.userId, preference);
   }
 
   await sendTelegramMessage(env, chatId, "Envia la imatge.");
+}
+
+async function sendMemberPrompt(
+  env: Env,
+  chatId: number,
+  userId: number,
+  preference: BirthdayPreference | null,
+): Promise<void> {
+  const prompt = buildMemberPrompt(userId, preference);
+  const referenceImage = await env.MEDIA_BUCKET.get(KORNIBOT_REFERENCE_IMAGE_KEY);
+
+  if (!referenceImage) {
+    await sendTelegramMessage(env, chatId, prompt);
+    return;
+  }
+
+  const bytes = await new Response(referenceImage.body).arrayBuffer();
+  const photo = new Blob([bytes], {
+    type: referenceImage.httpMetadata?.contentType ?? "image/png",
+  });
+
+  await sendTelegramPhoto(env, chatId, photo, "kornibot-profile.png", prompt);
 }
 
 async function persistBotFlow(
@@ -616,6 +723,53 @@ function parseInteger(value: string): number | null {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function parsePickerId(value: string | undefined): number | null {
+  return value ? parseInteger(value) : null;
+}
+
+function parsePickerCursor(value: string | undefined): number {
+  if (!value) {
+    return 0;
+  }
+
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function pagedItems<T>(items: T[], cursor: number): { items: T[]; previousCursor: number | null; nextCursor: number | null } {
+  const safeCursor = Math.max(0, cursor);
+  const pageItems = items.slice(safeCursor, safeCursor + CARD_PICKER_PAGE_SIZE);
+  return {
+    items: pageItems,
+    previousCursor: safeCursor > 0 ? Math.max(0, safeCursor - CARD_PICKER_PAGE_SIZE) : null,
+    nextCursor: safeCursor + CARD_PICKER_PAGE_SIZE < items.length ? safeCursor + CARD_PICKER_PAGE_SIZE : null,
+  };
+}
+
+function pickerNavigationRows(
+  kind: "w" | "m",
+  page: { previousCursor: number | null; nextCursor: number | null },
+): Array<Array<{ text: string; callback_data: string }>> {
+  const row: Array<{ text: string; callback_data: string }> = [];
+  if (page.previousCursor !== null) {
+    row.push({ text: "Anterior", callback_data: `card:${kind}:${page.previousCursor}` });
+  }
+  if (page.nextCursor !== null) {
+    row.push({ text: "Seguent", callback_data: `card:${kind}:${page.nextCursor}` });
+  }
+
+  return row.length ? [row] : [];
+}
+
+function formatWindowPickerLabel(window: BirthdayWindow): string {
+  return `${window.label} · ${window.startsOn}`;
+}
+
+function formatMemberPickerLabel(target: BirthdayCardMemberTarget): string {
+  const name = target.nickname ?? target.firstName ?? target.username ?? String(target.userId);
+  return target.month && target.day ? `${name} · ${target.day}/${target.month}` : name;
+}
+
 function parseCardScopeText(value: string): { scopeType: "global" | "window" | "member"; windowId: number | null; userId: number | null } | null {
   const trimmed = value.trim().toLocaleLowerCase("ca-ES");
   if (!trimmed) {
@@ -648,7 +802,9 @@ function buildMemberPrompt(userId: number, preference: BirthdayPreference | null
   const ideas = preference?.promptIdeas.length ? preference.promptIdeas.join(", ") : "member personality from staff notes";
   return [
     "Prompt per copiar:",
-    `Birthday card for member ${userId}. Include Kornibot, a colorful robotic unicorn mascot, as a friendly companion.`,
+    `Birthday card for member ${userId}.`,
+    `The attached image contains the "kornibot" character reference.`,
+    "Reframe and position kornibot inside the scene as a candid or posed birthday-card picture, matching the scene perspective, lighting, and mood.",
     `Ideas: ${ideas}.`,
     "Use inspired-by language, do not copy protected characters directly. Warm Barcelona community birthday mood.",
   ].join("\n");

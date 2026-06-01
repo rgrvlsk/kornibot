@@ -63,6 +63,15 @@ type BirthdayDemandRow = {
   member_card_count: number;
 };
 
+type BirthdayCardMemberTargetRow = {
+  user_id: number;
+  username: string | null;
+  nickname: string | null;
+  first_name: string | null;
+  month: number | null;
+  day: number | null;
+};
+
 type IdRow = {
   id: number;
 };
@@ -111,6 +120,15 @@ export type BirthdayWindow = {
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+export type BirthdayCardMemberTarget = {
+  userId: number;
+  username: string | null;
+  nickname: string | null;
+  firstName: string | null;
+  month: number | null;
+  day: number | null;
 };
 
 export type BirthdayInput = {
@@ -537,6 +555,38 @@ export async function listBirthdayWindows(db: D1DatabaseLike): Promise<BirthdayW
     .all<BirthdayWindowRow>();
 
   return rows.results.map(toWindow);
+}
+
+export async function listBirthdayCardMemberTargets(
+  db: D1DatabaseLike,
+): Promise<BirthdayCardMemberTarget[]> {
+  const rows = await db.prepare(`
+      SELECT
+        users.user_id,
+        users.username,
+        users.nickname,
+        users.first_name,
+        birthday_preferences.month,
+        birthday_preferences.day
+      FROM users
+      LEFT JOIN birthday_preferences
+        ON birthday_preferences.user_id = users.user_id
+      WHERE users.is_bot = 0
+        AND COALESCE(users.last_membership_status, 'member') IN ('member', 'administrator', 'creator', 'restricted')
+      ORDER BY
+        LOWER(COALESCE(users.nickname, users.first_name, users.username, CAST(users.user_id AS TEXT))) ASC,
+        users.user_id ASC
+    `)
+    .all<BirthdayCardMemberTargetRow>();
+
+  return rows.results.map((row) => ({
+    userId: row.user_id,
+    username: row.username,
+    nickname: row.nickname,
+    firstName: row.first_name,
+    month: row.month,
+    day: row.day,
+  }));
 }
 
 export async function queryBirthdayWindow(db: D1DatabaseLike, windowId: number): Promise<BirthdayWindow | null> {

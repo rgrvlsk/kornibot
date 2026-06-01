@@ -23,7 +23,7 @@ function createEnv() {
     TELEGRAM_BOT_USERNAME: "kornibot_bot",
   };
 
-  return { db, env };
+  return { db, bucket, env };
 }
 
 function seedSettings(db: SqliteD1Database): void {
@@ -58,7 +58,7 @@ beforeEach(() => {
       });
     }
 
-    if (url.pathname.endsWith("/sendMessage") || url.pathname.endsWith("/answerCallbackQuery") || url.pathname.endsWith("/setMyCommands")) {
+    if (url.pathname.endsWith("/sendPhoto") || url.pathname.endsWith("/sendMessage") || url.pathname.endsWith("/answerCallbackQuery") || url.pathname.endsWith("/setMyCommands")) {
       return new Response(JSON.stringify({ ok: true, result: true }), {
         headers: { "content-type": "application/json" },
       });
@@ -273,6 +273,144 @@ describe("birthday bot flows", () => {
     expect(response.status).toBe(200);
     expect(sendBody?.text).not.toContain("/aniversari");
     expect(sendBody?.text).toContain("/felicitacions");
+  });
+
+  it("lists birthday windows when staff choose a window card target", async () => {
+    const { db, env } = createEnv();
+    seedSettings(db);
+    db.sqlite.exec(`
+      INSERT INTO birthday_windows (id, label, starts_on, ends_on, color, enabled)
+      VALUES
+        (10, 'Primavera', '2026-03-01', '2026-05-31', '#7ab7ff', 1),
+        (11, 'Estiu', '2026-06-01', '2026-08-31', '#ffcc66', 1);
+    `);
+
+    const response = await sendWebhookUpdate(env, {
+      update_id: 511,
+      callback_query: {
+        id: "cb-window",
+        from: { id: 100, is_bot: false, first_name: "Ada", username: "ada" },
+        message: {
+          message_id: 20,
+          date: 1_778_000_010,
+          chat: { id: 100, type: "private" },
+        },
+        data: "card:window",
+      },
+    });
+    const sendBody = vi.mocked(globalThis.fetch).mock.calls
+      .filter(([input]) => String(input).includes("/sendMessage"))
+      .map(([, init]) => JSON.parse(String(init?.body ?? "{}")) as {
+        text?: string;
+        reply_markup?: { inline_keyboard?: Array<Array<{ text?: string; callback_data?: string }>> };
+      })
+      .at(-1);
+
+    expect(response.status).toBe(200);
+    expect(sendBody?.text).toBe("Tria finestra.");
+    expect(sendBody?.reply_markup?.inline_keyboard).toEqual([
+      [{ text: "Primavera · 2026-03-01", callback_data: "card:wp:10" }],
+      [{ text: "Estiu · 2026-06-01", callback_data: "card:wp:11" }],
+    ]);
+    expect(db.sqlite.prepare("SELECT step, state_json FROM bot_flow_states WHERE user_id = 100 AND flow = 'cards'").get()).toEqual({
+      step: "scope",
+      state_json: JSON.stringify({ awaiting: "window" }),
+    });
+  });
+
+  it("pages active members when staff choose a member card target", async () => {
+    const { db, env } = createEnv();
+    seedSettings(db);
+    const memberRows = Array.from({ length: 7 }, (_, index) => {
+      const userId = 200 + index;
+      return `(${userId}, 'user${index}', 'User ${index}', 'member', '2026-05-06T12:00:00.000Z')`;
+    }).join(",");
+    db.sqlite.exec(`
+      INSERT INTO users (user_id, username, first_name, last_membership_status, updated_at)
+      VALUES ${memberRows};
+      INSERT INTO birthday_preferences (user_id, month, day, year, wants_ai_card, prompt_ideas_json)
+      VALUES
+        (200, 4, 23, NULL, 0, '[]'),
+        (201, 5, 1, NULL, 0, '[]');
+    `);
+
+    const response = await sendWebhookUpdate(env, {
+      update_id: 512,
+      callback_query: {
+        id: "cb-member",
+        from: { id: 100, is_bot: false, first_name: "Ada", username: "ada" },
+        message: {
+          message_id: 21,
+          date: 1_778_000_011,
+          chat: { id: 100, type: "private" },
+        },
+        data: "card:member",
+      },
+    });
+    const sendBody = vi.mocked(globalThis.fetch).mock.calls
+      .filter(([input]) => String(input).includes("/sendMessage"))
+      .map(([, init]) => JSON.parse(String(init?.body ?? "{}")) as {
+        text?: string;
+        reply_markup?: { inline_keyboard?: Array<Array<{ text?: string; callback_data?: string }>> };
+      })
+      .at(-1);
+
+    expect(response.status).toBe(200);
+    expect(sendBody?.text).toBe("Tria membre.");
+    expect(sendBody?.reply_markup?.inline_keyboard?.slice(0, 5)).toEqual([
+      [{ text: "User 0 · 23/4", callback_data: "card:mp:200" }],
+      [{ text: "User 1 · 1/5", callback_data: "card:mp:201" }],
+      [{ text: "User 2", callback_data: "card:mp:202" }],
+      [{ text: "User 3", callback_data: "card:mp:203" }],
+      [{ text: "User 4", callback_data: "card:mp:204" }],
+    ]);
+    expect(sendBody?.reply_markup?.inline_keyboard?.at(-1)).toEqual([
+      { text: "Seguent", callback_data: "card:m:5" },
+    ]);
+  });
+
+  it("sends the Kornibot reference image and prompt when staff choose a member", async () => {
+    const { db, bucket, env } = createEnv();
+    seedSettings(db);
+    await bucket.put("deploy-assets/kornibot-profile.png", "kornibot-image", {
+      httpMetadata: { contentType: "image/png" },
+    });
+    db.sqlite.exec(`
+      INSERT INTO users (user_id, username, first_name, last_membership_status, updated_at)
+      VALUES (200, 'lin', 'Lin', 'member', '2026-05-06T12:00:00.000Z');
+      INSERT INTO birthday_preferences (user_id, month, day, year, wants_ai_card, prompt_ideas_json)
+      VALUES (200, 5, 1, NULL, 1, '["castells","llibres"]');
+    `);
+
+    const response = await sendWebhookUpdate(env, {
+      update_id: 513,
+      callback_query: {
+        id: "cb-member-pick",
+        from: { id: 100, is_bot: false, first_name: "Ada", username: "ada" },
+        message: {
+          message_id: 22,
+          date: 1_778_000_012,
+          chat: { id: 100, type: "private" },
+        },
+        data: "card:mp:200",
+      },
+    });
+    const sendPhotoCall = vi.mocked(globalThis.fetch).mock.calls.find(([input]) => String(input).includes("/sendPhoto"));
+    const form = sendPhotoCall?.[1]?.body as FormData | undefined;
+    const caption = String(form?.get("caption") ?? "");
+    const photo = form?.get("photo") as File | null;
+
+    expect(response.status).toBe(200);
+    expect(caption).toContain("The attached image contains the \"kornibot\" character reference.");
+    expect(caption).toContain("Reframe and position kornibot inside the scene");
+    expect(caption).toContain("candid or posed birthday-card picture");
+    expect(caption).toContain("Ideas: castells, llibres.");
+    expect(photo?.name).toBe("kornibot-profile.png");
+    expect(photo?.type).toBe("image/png");
+    expect(db.sqlite.prepare("SELECT step, state_json FROM bot_flow_states WHERE user_id = 100 AND flow = 'cards'").get()).toEqual({
+      step: "upload",
+      state_json: JSON.stringify({ scopeType: "member", windowId: null, userId: 200 }),
+    });
   });
 
   it("snarks on unrealistic years and accepts a realistic two-digit year", async () => {
