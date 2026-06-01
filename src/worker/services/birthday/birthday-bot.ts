@@ -6,10 +6,11 @@ import { readGroupSettings } from "../settings/group-settings";
 import { sendTelegramMessage, sendTelegramPhoto, answerTelegramCallbackQuery } from "../telegram/api";
 import { fetchTelegramChatMember, isActiveTelegramChatMember } from "../telegram/fetch-chat-member";
 import { fetchTelegramFile } from "../telegram/fetch-file";
-import type { NormalizedCallbackQueryUpdate, NormalizedMessageUpdate, NormalizedTelegramUpdate } from "../telegram/normalize-update";
+import type { NormalizedCallbackQueryUpdate, NormalizedMediaAttachment, NormalizedMessageUpdate, NormalizedTelegramUpdate } from "../telegram/normalize-update";
 import {
   createBirthdayCard,
   deleteBirthdayPreference,
+  ensureUpcomingBirthdayWindows,
   listBirthdayCardMemberTargets,
   listBirthdayWindows,
   normalizeBirthdayYear,
@@ -93,7 +94,7 @@ export async function handleBirthdayBotUpdate(
           url: botDeepLink(env, command),
         }]],
       },
-    });
+    }).catch(() => undefined);
     return "continue";
   }
 
@@ -384,7 +385,13 @@ async function handleCardCallback(env: Env, update: NormalizedCallbackQueryUpdat
 }
 
 async function sendWindowPicker(env: Env, chatId: number, cursor: number): Promise<void> {
-  const windows = (await listBirthdayWindows(env.DB)).filter((window) => window.enabled);
+  let windows = await listBirthdayWindows(env.DB);
+  if (windows.length === 0) {
+    await ensureUpcomingBirthdayWindows(env.DB, new Date());
+    windows = await listBirthdayWindows(env.DB);
+  }
+
+  windows = windows.filter((window) => window.enabled);
   const page = pagedItems(windows, cursor);
   if (page.items.length === 0) {
     await sendTelegramMessage(env, chatId, "Cap finestra disponible. Escriu un ID de finestra valid.");
@@ -495,7 +502,7 @@ async function handleCardUploadMedia(
     return;
   }
 
-  if (update.media.mimeType && !update.media.mimeType.startsWith("image/")) {
+  if (update.media.mimeType && !isImageContentType(update.media.mimeType) && !isGenericBinaryContentType(update.media.mimeType)) {
     await sendTelegramMessage(env, update.chatId, "El fitxer no es imatge.");
     return;
   }
@@ -512,13 +519,13 @@ async function handleCardUploadMedia(
     return;
   }
 
-  const contentType = response.headers.get("content-type") ?? update.media.mimeType ?? "image/jpeg";
-  if (!contentType.startsWith("image/")) {
+  const contentType = inferImageContentType(update.media, response.headers.get("content-type"));
+  if (!contentType) {
     await sendTelegramMessage(env, update.chatId, "El fitxer no es imatge.");
     return;
   }
 
-  const fileName = update.media.fileName ?? `${update.media.kind}-${update.media.fileUniqueId}.jpg`;
+  const fileName = update.media.fileName ?? `${update.media.kind}-${update.media.fileUniqueId}.${imageExtension(contentType)}`;
   const file = new File([await response.arrayBuffer()], fileName, { type: contentType });
   let card: Awaited<ReturnType<typeof createBirthdayCard>>;
   try {
@@ -588,7 +595,8 @@ async function sendMemberPrompt(
     type: referenceImage.httpMetadata?.contentType ?? "image/png",
   });
 
-  await sendTelegramPhoto(env, chatId, photo, "kornibot-profile.png", prompt);
+  await sendTelegramPhoto(env, chatId, photo, "kornibot-profile.png");
+  await sendTelegramMessage(env, chatId, prompt);
 }
 
 async function persistBotFlow(
@@ -721,6 +729,65 @@ function splitIdeas(value: string): string[] {
 function parseInteger(value: string): number | null {
   const parsed = Number(value.trim());
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function inferImageContentType(media: NormalizedMediaAttachment, responseContentType: string | null): string | null {
+  return normalizeImageContentType(media.mimeType)
+    ?? normalizeImageContentType(responseContentType)
+    ?? imageContentTypeFromFileName(media.fileName)
+    ?? (media.kind === "photo" ? "image/jpeg" : null);
+}
+
+function isImageContentType(value: string): boolean {
+  return normalizeImageContentType(value) !== null;
+}
+
+function normalizeImageContentType(value: string | null): string | null {
+  const contentType = normalizeContentType(value);
+  return contentType?.startsWith("image/") ? contentType : null;
+}
+
+function isGenericBinaryContentType(value: string): boolean {
+  const contentType = normalizeContentType(value);
+  return contentType === "application/octet-stream" || contentType === "binary/octet-stream";
+}
+
+function normalizeContentType(value: string | null): string | null {
+  return value?.split(";")[0]?.trim().toLowerCase() || null;
+}
+
+function imageContentTypeFromFileName(fileName: string | null): string | null {
+  const extension = fileName?.split(".").pop()?.toLowerCase();
+  switch (extension) {
+    case "avif":
+      return "image/avif";
+    case "gif":
+      return "image/gif";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    default:
+      return null;
+  }
+}
+
+function imageExtension(contentType: string): string {
+  switch (normalizeImageContentType(contentType)) {
+    case "image/avif":
+      return "avif";
+    case "image/gif":
+      return "gif";
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    default:
+      return "jpg";
+  }
 }
 
 function parsePickerId(value: string | undefined): number | null {

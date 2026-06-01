@@ -111,11 +111,13 @@ export async function sendTelegramPhoto(
   chatId: number,
   photo: Blob,
   fileName: string,
-  caption: string,
+  caption?: string,
 ): Promise<TelegramSentMessage> {
   const form = new FormData();
   form.set("chat_id", String(chatId));
-  form.set("caption", caption);
+  if (caption) {
+    form.set("caption", caption);
+  }
   form.set("photo", photo, fileName);
 
   const response = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/sendPhoto`, {

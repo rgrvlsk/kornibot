@@ -123,6 +123,51 @@ describe("birthday bot flows", () => {
     expect(body.reply_markup?.inline_keyboard?.[0]?.[0]?.url).toBe("https://t.me/kornibot_bot?start=aniversari");
   });
 
+  it("audits group birthday commands when the deep-link reply fails", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = new URL(String(input));
+
+      if (url.pathname.endsWith("/sendMessage")) {
+        return new Response(JSON.stringify({ ok: false, description: "Forbidden" }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (url.pathname.endsWith("/getChatMember")) {
+        return new Response(JSON.stringify({ ok: true, result: { status: "member" } }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (url.pathname.endsWith("/sendPhoto") || url.pathname.endsWith("/answerCallbackQuery") || url.pathname.endsWith("/setMyCommands")) {
+        return new Response(JSON.stringify({ ok: true, result: true }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      throw new Error(`unexpected Telegram call: ${url.pathname}`);
+    });
+    const { db, env } = createEnv();
+    seedSettings(db);
+
+    const response = await sendWebhookUpdate(env, {
+      update_id: 514,
+      message: {
+        message_id: 23,
+        date: 1_778_000_013,
+        chat: { id: -1002829359850, type: "supergroup", title: "Policornis" },
+        from: { id: 100, is_bot: false, first_name: "Ada", username: "ada" },
+        text: "/felicitacions",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(db.sqlite.prepare("SELECT update_id, event_kind FROM raw_events").all()).toEqual([
+      { update_id: 514, event_kind: "message" },
+    ]);
+  });
+
   it("starts /start aniversari deep links in private chat", async () => {
     const { db, env } = createEnv();
     seedSettings(db);
@@ -318,6 +363,39 @@ describe("birthday bot flows", () => {
     });
   });
 
+  it("seeds preset birthday windows before showing the bot window picker", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-01T00:00:00.000Z"));
+    const { db, env } = createEnv();
+    seedSettings(db);
+
+    const response = await sendWebhookUpdate(env, {
+      update_id: 515,
+      callback_query: {
+        id: "cb-seed-window",
+        from: { id: 100, is_bot: false, first_name: "Ada", username: "ada" },
+        message: {
+          message_id: 24,
+          date: 1_778_000_014,
+          chat: { id: 100, type: "private" },
+        },
+        data: "card:window",
+      },
+    });
+    const sendBody = vi.mocked(globalThis.fetch).mock.calls
+      .filter(([input]) => String(input).includes("/sendMessage"))
+      .map(([, init]) => JSON.parse(String(init?.body ?? "{}")) as {
+        text?: string;
+        reply_markup?: { inline_keyboard?: Array<Array<{ text?: string; callback_data?: string }>> };
+      })
+      .at(-1);
+
+    expect(response.status).toBe(200);
+    expect(db.sqlite.prepare("SELECT COUNT(*) AS count FROM birthday_windows").get()).toEqual({ count: 42 });
+    expect(sendBody?.text).toBe("Tria finestra.");
+    expect(sendBody?.reply_markup?.inline_keyboard?.[0]?.[0]?.callback_data).toBe("card:wp:1");
+  });
+
   it("pages active members when staff choose a member card target", async () => {
     const { db, env } = createEnv();
     seedSettings(db);
@@ -397,20 +475,90 @@ describe("birthday bot flows", () => {
     });
     const sendPhotoCall = vi.mocked(globalThis.fetch).mock.calls.find(([input]) => String(input).includes("/sendPhoto"));
     const form = sendPhotoCall?.[1]?.body as FormData | undefined;
-    const caption = String(form?.get("caption") ?? "");
     const photo = form?.get("photo") as File | null;
+    const promptBody = vi.mocked(globalThis.fetch).mock.calls
+      .filter(([input]) => String(input).includes("/sendMessage"))
+      .map(([, init]) => JSON.parse(String(init?.body ?? "{}")) as { text?: string })
+      .find((body) => body.text?.includes("The attached image contains the \"kornibot\" character reference."));
 
     expect(response.status).toBe(200);
-    expect(caption).toContain("The attached image contains the \"kornibot\" character reference.");
-    expect(caption).toContain("Reframe and position kornibot inside the scene");
-    expect(caption).toContain("candid or posed birthday-card picture");
-    expect(caption).toContain("Ideas: castells, llibres.");
+    expect(form?.has("caption")).toBe(false);
+    expect(promptBody?.text).toContain("The attached image contains the \"kornibot\" character reference.");
+    expect(promptBody?.text).toContain("Reframe and position kornibot inside the scene");
+    expect(promptBody?.text).toContain("candid or posed birthday-card picture");
+    expect(promptBody?.text).toContain("Ideas: castells, llibres.");
     expect(photo?.name).toBe("kornibot-profile.png");
     expect(photo?.type).toBe("image/png");
     expect(db.sqlite.prepare("SELECT step, state_json FROM bot_flow_states WHERE user_id = 100 AND flow = 'cards'").get()).toEqual({
       step: "upload",
       state_json: JSON.stringify({ scopeType: "member", windowId: null, userId: 200 }),
     });
+  });
+
+  it("accepts Telegram photos downloaded with a generic content type", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = new URL(String(input));
+
+      if (url.pathname.endsWith("/getChatMember")) {
+        return new Response(JSON.stringify({ ok: true, result: { status: "member" } }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (url.pathname.endsWith("/getFile")) {
+        return new Response(JSON.stringify({
+          ok: true,
+          result: { file_path: "photos/card.jpg", file_size: 10 },
+        }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (url.pathname.endsWith("/photos/card.jpg")) {
+        return new Response("image-data", {
+          headers: { "content-type": "application/octet-stream" },
+        });
+      }
+
+      if (url.pathname.endsWith("/sendMessage") || url.pathname.endsWith("/sendPhoto") || url.pathname.endsWith("/answerCallbackQuery") || url.pathname.endsWith("/setMyCommands")) {
+        return new Response(JSON.stringify({ ok: true, result: true }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      throw new Error(`unexpected Telegram call: ${url.pathname}`);
+    });
+    const { db, bucket, env } = createEnv();
+    seedSettings(db);
+    db.sqlite.exec(`
+      INSERT INTO bot_flow_states (user_id, flow, step, state_json, expires_at)
+      VALUES (100, 'cards', 'upload', '{"scopeType":"global","windowId":null,"userId":null}', '2099-01-01T00:00:00.000Z');
+    `);
+
+    const response = await sendWebhookUpdate(env, {
+      update_id: 516,
+      message: {
+        message_id: 25,
+        date: 1_778_000_015,
+        chat: { id: 100, type: "private" },
+        from: { id: 100, is_bot: false, first_name: "Ada", username: "ada" },
+        photo: [
+          { file_id: "photo-small", file_unique_id: "small", width: 10, height: 10, file_size: 5 },
+          { file_id: "photo-big", file_unique_id: "big", width: 100, height: 100, file_size: 10 },
+        ],
+      },
+    });
+    const cardRow = db.sqlite.prepare("SELECT scope_type, mime_type FROM birthday_cards").get();
+    const sendBody = vi.mocked(globalThis.fetch).mock.calls
+      .filter(([input]) => String(input).includes("/sendMessage"))
+      .map(([, init]) => JSON.parse(String(init?.body ?? "{}")) as { text?: string })
+      .at(-1);
+
+    expect(response.status).toBe(200);
+    expect(cardRow).toEqual({ scope_type: "global", mime_type: "image/jpeg" });
+    expect(bucket.puts[0]?.body).toBe("image-data");
+    expect(bucket.puts[0]?.httpMetadata?.contentType).toBe("image/jpeg");
+    expect(sendBody?.text).toBe("Felicitacio pujada #1.");
   });
 
   it("snarks on unrealistic years and accepts a realistic two-digit year", async () => {
