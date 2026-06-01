@@ -45,6 +45,15 @@ function seedFixture(db: SqliteD1Database): void {
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async (input) => {
     const url = new URL(String(input));
+    if (url.pathname.endsWith("/setMyCommands")) {
+      return new Response(JSON.stringify({
+        ok: true,
+        result: true,
+      }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+
     const chatId = url.searchParams.get("chat_id");
     const userId = url.searchParams.get("user_id");
     const status = chatId === "-1002829359850"
@@ -111,6 +120,28 @@ describe("member status refresh", () => {
     expect(
       db.sqlite.prepare("SELECT COUNT(*) AS count FROM member_status_checks").get(),
     ).toEqual({ count: 2 });
+    const commandCalls = vi.mocked(globalThis.fetch).mock.calls
+      .filter(([input]) => String(input).includes("/setMyCommands"))
+      .map(([, init]) => JSON.parse(String(init?.body ?? "{}")) as {
+        scope?: { type?: string; chat_id?: number };
+        commands?: Array<{ command: string }>;
+      });
+    expect(commandCalls).toEqual([
+      {
+        scope: { type: "chat", chat_id: 100 },
+        commands: [
+          { command: "menu", description: "Mostra les comandes disponibles" },
+          { command: "aniversari", description: "Guarda el teu aniversari" },
+        ],
+      },
+      {
+        scope: { type: "chat", chat_id: 200 },
+        commands: [
+          { command: "menu", description: "Mostra les comandes disponibles" },
+          { command: "felicitacions", description: "Puja imatges de felicitacio" },
+        ],
+      },
+    ]);
 
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockClear();

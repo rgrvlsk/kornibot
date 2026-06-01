@@ -20,6 +20,16 @@ export type TelegramSentMessage = {
   message_id: number;
 };
 
+export type TelegramBotCommand = {
+  command: string;
+  description: string;
+};
+
+export type TelegramBotCommandScope =
+  | { type: "all_private_chats" }
+  | { type: "chat"; chat_id: number | string }
+  | { type: "chat_member"; chat_id: number | string; user_id: number };
+
 export class TelegramApiError extends Error {
   public constructor(message: string) {
     super(message);
@@ -82,6 +92,17 @@ export async function answerTelegramCallbackQuery(
   await callTelegramMethod(env, "answerCallbackQuery", {
     callback_query_id: callbackQueryId,
     ...(text ? { text } : {}),
+  });
+}
+
+export async function setTelegramBotCommands(
+  env: Env,
+  commands: TelegramBotCommand[],
+  scope: TelegramBotCommandScope,
+): Promise<boolean> {
+  return callTelegramMethod<boolean>(env, "setMyCommands", {
+    scope,
+    commands,
   });
 }
 

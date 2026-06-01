@@ -1,4 +1,6 @@
 import type { Env } from "../../../shared/env";
+import { formatPrivateBotCommandMenu, type PrivateBotCommandName } from "../bot/command-registry";
+import { emptyPrivateBotCommandAccess, resolveLivePrivateBotCommandAccess, syncPrivateBotCommandsForAccess } from "../bot/command-sync";
 import { resolveRole } from "../auth/resolve-role";
 import { readGroupSettings } from "../settings/group-settings";
 import { sendTelegramMessage, answerTelegramCallbackQuery } from "../telegram/api";
@@ -45,7 +47,16 @@ export async function handleBirthdayBotUpdate(
   }
 
   const text = update.text?.trim() ?? "";
-  const command = birthdayCommandFromText(text);
+  const command = botCommandFromText(text);
+  if (command === "menu") {
+    if (update.chatType === "private") {
+      await handleMenuCommand(env, update);
+      return "handled";
+    }
+
+    return "continue";
+  }
+
   if (command) {
     const privateCommandText = /^\/start(?:@\w+)?(?:\s|$)/i.test(text)
       ? (command === "felicitacions" ? "/felicitacions" : "/aniversari")
@@ -87,6 +98,17 @@ export async function handleBirthdayBotUpdate(
 
   await handleCardsTextOrUpload(env, update, flow);
   return "handled";
+}
+
+async function handleMenuCommand(env: Env, update: NormalizedMessageUpdate): Promise<void> {
+  if (!update.fromUser) {
+    await sendTelegramMessage(env, update.chatId, formatPrivateBotCommandMenu(emptyPrivateBotCommandAccess()));
+    return;
+  }
+
+  const access = await resolveLivePrivateBotCommandAccess(env, update.fromUser.userId);
+  await syncPrivateBotCommandsForAccess(env, update.fromUser.userId, access);
+  await sendTelegramMessage(env, update.chatId, formatPrivateBotCommandMenu(access));
 }
 
 async function handlePrivateCommand(
@@ -638,7 +660,7 @@ function deepLinkMessage(command: "aniversari" | "felicitacions"): string {
     : "Obre DM amb Kornibot per guardar el teu aniversari.";
 }
 
-function birthdayCommandFromText(text: string): "aniversari" | "felicitacions" | null {
+function botCommandFromText(text: string): PrivateBotCommandName | "menu" | null {
   const match = /^\/([a-zA-Z_]+)(?:@\w+)?(?:\s+(.+))?$/u.exec(text.trim());
   if (!match) {
     return null;
@@ -648,6 +670,10 @@ function birthdayCommandFromText(text: string): "aniversari" | "felicitacions" |
   const payload = match[2]?.trim().split(/\s+/)[0]?.toLocaleLowerCase("ca-ES") ?? "";
   if (command === "aniversari" || command === "felicitacions") {
     return command;
+  }
+
+  if (command === "menu") {
+    return "menu";
   }
 
   if (command === "start" && (payload === "aniversari" || payload === "felicitacions")) {

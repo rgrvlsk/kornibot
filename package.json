@@ -22,6 +22,7 @@
     "deploy:all": "tsx scripts/deploy.ts deploy:all",
     "dev-access": "tsx scripts/deploy.ts dev-access",
     "cf-typegen": "wrangler types",
+    "telegram:commands:set": "tsx scripts/telegram-commands.ts",
     "telegram:webhook:set": "tsx scripts/telegram-webhook.ts set",
     "telegram:webhook:info": "tsx scripts/telegram-webhook.ts info"
   },

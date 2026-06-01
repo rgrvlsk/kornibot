@@ -58,7 +58,7 @@ beforeEach(() => {
       });
     }
 
-    if (url.pathname.endsWith("/sendMessage") || url.pathname.endsWith("/answerCallbackQuery")) {
+    if (url.pathname.endsWith("/sendMessage") || url.pathname.endsWith("/answerCallbackQuery") || url.pathname.endsWith("/setMyCommands")) {
       return new Response(JSON.stringify({ ok: true, result: true }), {
         headers: { "content-type": "application/json" },
       });
@@ -142,6 +142,137 @@ describe("birthday bot flows", () => {
     expect(db.sqlite.prepare("SELECT user_id, flow, step FROM bot_flow_states").all()).toEqual([
       { user_id: 100, flow: "birthday", step: "month" },
     ]);
+  });
+
+  it("shows an empty menu to private users without command access", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = new URL(String(input));
+
+      if (url.pathname.endsWith("/getChatMember")) {
+        return new Response(JSON.stringify({ ok: true, result: { status: "left" } }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (url.pathname.endsWith("/sendMessage") || url.pathname.endsWith("/answerCallbackQuery") || url.pathname.endsWith("/setMyCommands")) {
+        return new Response(JSON.stringify({ ok: true, result: true }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      throw new Error(`unexpected Telegram call: ${url.pathname}`);
+    });
+    const { db, env } = createEnv();
+    seedSettings(db);
+
+    const response = await sendWebhookUpdate(env, {
+      update_id: 508,
+      message: {
+        message_id: 17,
+        date: 1_778_000_007,
+        chat: { id: 900, type: "private" },
+        from: { id: 900, is_bot: false, first_name: "Noa", username: "noa" },
+        text: "/menu",
+      },
+    });
+    const sendBody = vi.mocked(globalThis.fetch).mock.calls
+      .filter(([input]) => String(input).includes("/sendMessage"))
+      .map(([, init]) => JSON.parse(String(init?.body ?? "{}")) as { text?: string })
+      .at(-1);
+
+    expect(response.status).toBe(200);
+    expect(db.sqlite.prepare("SELECT COUNT(*) AS count FROM raw_events").get()).toEqual({ count: 0 });
+    expect(sendBody?.text).toBe("Comandes disponibles:");
+  });
+
+  it("shows birthday commands to active audit members", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = new URL(String(input));
+
+      if (url.pathname.endsWith("/getChatMember")) {
+        const chatId = url.searchParams.get("chat_id");
+        return new Response(JSON.stringify({
+          ok: true,
+          result: { status: chatId === "-1002829359850" ? "member" : "left" },
+        }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (url.pathname.endsWith("/sendMessage") || url.pathname.endsWith("/answerCallbackQuery") || url.pathname.endsWith("/setMyCommands")) {
+        return new Response(JSON.stringify({ ok: true, result: true }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      throw new Error(`unexpected Telegram call: ${url.pathname}`);
+    });
+    const { db, env } = createEnv();
+    seedSettings(db);
+
+    const response = await sendWebhookUpdate(env, {
+      update_id: 509,
+      message: {
+        message_id: 18,
+        date: 1_778_000_008,
+        chat: { id: 200, type: "private" },
+        from: { id: 200, is_bot: false, first_name: "Pau", username: "pau" },
+        text: "/menu",
+      },
+    });
+    const sendBody = vi.mocked(globalThis.fetch).mock.calls
+      .filter(([input]) => String(input).includes("/sendMessage"))
+      .map(([, init]) => JSON.parse(String(init?.body ?? "{}")) as { text?: string })
+      .at(-1);
+
+    expect(response.status).toBe(200);
+    expect(sendBody?.text).toContain("/aniversari");
+    expect(sendBody?.text).not.toContain("/felicitacions");
+  });
+
+  it("shows staff card commands to CAA members", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = new URL(String(input));
+
+      if (url.pathname.endsWith("/getChatMember")) {
+        const chatId = url.searchParams.get("chat_id");
+        return new Response(JSON.stringify({
+          ok: true,
+          result: { status: chatId === "-5555" ? "member" : "left" },
+        }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (url.pathname.endsWith("/sendMessage") || url.pathname.endsWith("/answerCallbackQuery") || url.pathname.endsWith("/setMyCommands")) {
+        return new Response(JSON.stringify({ ok: true, result: true }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      throw new Error(`unexpected Telegram call: ${url.pathname}`);
+    });
+    const { db, env } = createEnv();
+    seedSettings(db);
+
+    const response = await sendWebhookUpdate(env, {
+      update_id: 510,
+      message: {
+        message_id: 19,
+        date: 1_778_000_009,
+        chat: { id: 300, type: "private" },
+        from: { id: 300, is_bot: false, first_name: "Riu", username: "riu" },
+        text: "/menu",
+      },
+    });
+    const sendBody = vi.mocked(globalThis.fetch).mock.calls
+      .filter(([input]) => String(input).includes("/sendMessage"))
+      .map(([, init]) => JSON.parse(String(init?.body ?? "{}")) as { text?: string })
+      .at(-1);
+
+    expect(response.status).toBe(200);
+    expect(sendBody?.text).not.toContain("/aniversari");
+    expect(sendBody?.text).toContain("/felicitacions");
   });
 
   it("snarks on unrealistic years and accepts a realistic two-digit year", async () => {

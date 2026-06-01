@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { buildSetCommandsRequest } from "../../scripts/telegram-commands";
 import { buildSetWebhookRequest, parseTelegramWebhookArgs } from "../../scripts/telegram-webhook";
 
 describe("telegram webhook script helpers", () => {
@@ -32,6 +33,24 @@ describe("telegram webhook script helpers", () => {
         url: "https://worker.example.com/telegram/webhook",
         secret_token: "secret",
         allowed_updates: ["message", "edited_message", "message_reaction", "chat_member", "callback_query"],
+      }),
+    });
+  });
+});
+
+describe("telegram commands script helpers", () => {
+  it("builds setMyCommands request to clear the default private menu", () => {
+    const request = buildSetCommandsRequest("token");
+
+    expect(request.url).toBe("https://api.telegram.org/bottoken/setMyCommands");
+    expect(request.init).toEqual({
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        scope: { type: "all_private_chats" },
+        commands: [],
       }),
     });
   });

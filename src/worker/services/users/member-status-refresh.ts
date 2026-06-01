@@ -1,4 +1,5 @@
 import type { Env } from "../../../shared/env";
+import { syncPrivateBotCommandsForAccess } from "../bot/command-sync";
 import { readGroupSettings } from "../settings/group-settings";
 import { fetchTelegramChatMember, isActiveTelegramChatMember, type TelegramChatMember } from "../telegram/fetch-chat-member";
 import { markCaaRoleActive, markCaaRoleInactive } from "../auth/sync-caa-roles";
@@ -44,6 +45,21 @@ const SCHEDULED_BATCH_LIMIT = 32;
 
 async function knownUserExists(db: D1DatabaseLike, userId: number): Promise<boolean> {
   const row = await db.prepare("SELECT user_id FROM users WHERE user_id = ? LIMIT 1")
+    .bind(userId)
+    .first<{ user_id: number }>();
+
+  return row !== null;
+}
+
+async function hasActiveSuperadminRole(db: D1DatabaseLike, userId: number): Promise<boolean> {
+  const row = await db.prepare(`
+      SELECT user_id
+      FROM auth_roles
+      WHERE user_id = ?
+        AND role = 'superadmin'
+        AND is_active = 1
+      LIMIT 1
+    `)
     .bind(userId)
     .first<{ user_id: number }>();
 
@@ -199,6 +215,12 @@ export async function refreshSingleMemberStatus(
 
   await updateAuditMembershipProjection(env, userId, auditCheck.status, checkedAt);
   const caaRole = await updateCaaRole(env, userId, caaCheck.active, now);
+  const isSuperadmin = await hasActiveSuperadminRole(env.DB, userId);
+  await syncPrivateBotCommandsForAccess(env, userId, {
+    auditMember: auditCheck.active,
+    staff: caaRole.isCaaMember || isSuperadmin,
+    superadmin: isSuperadmin,
+  });
   await insertStatusCheck(env, {
     userId,
     auditChatId: groups.auditChatId,

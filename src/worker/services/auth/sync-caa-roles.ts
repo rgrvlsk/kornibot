@@ -1,4 +1,5 @@
 import type { Env } from "../../../shared/env";
+import { syncPrivateBotCommandsForStoredAccess } from "../bot/command-sync";
 import { getCaaChatId } from "../settings/group-settings";
 import { fetchTelegramChatMember, isActiveTelegramChatMember } from "../telegram/fetch-chat-member";
 
@@ -48,10 +49,12 @@ export async function refreshSingleCaaMemberRole(
   const member = await fetchTelegramChatMember(env, caaChatId, userId);
   if (isActiveTelegramChatMember(member)) {
     await markCaaRoleActive(env, userId, now);
+    await syncPrivateBotCommandsForStoredAccess(env, userId, { staff: true });
     return true;
   }
 
   await markCaaRoleInactive(env, userId);
+  await syncPrivateBotCommandsForStoredAccess(env, userId, { staff: false });
   return false;
 }
 
@@ -105,9 +108,11 @@ export async function refreshKnownCaaMemberRoles(
       const member = await fetchTelegramChatMember(env, caaChatId, row.user_id);
       if (isActiveTelegramChatMember(member)) {
         await markCaaRoleActive(env, row.user_id, now);
+        await syncPrivateBotCommandsForStoredAccess(env, row.user_id, { staff: true });
         result.active += 1;
       } else {
         result.deactivated += await markCaaRoleInactive(env, row.user_id);
+        await syncPrivateBotCommandsForStoredAccess(env, row.user_id, { staff: false });
       }
     } catch {
       result.failed += 1;
